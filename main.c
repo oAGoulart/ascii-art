@@ -134,7 +134,7 @@ typedef struct screen_s {
 /* frame_t object destructor */
 static void _frame_dtor(frame_t* self)
 {
-	free_memory((void**)&(self->_pixel_matrix));
+	//free_memory((void**)&(self->_pixel_matrix));
 }
 
 /* get pixel value in given position */
@@ -157,7 +157,7 @@ static void _frame_set_pixel(frame_t* self, const char value, size_t colunm, siz
 	}
 }
 
-/* copy @matrix values to @self->_pixel_matrix */
+/* copy @matrix to @self->_pixel_matrix */
 static bool _frame_swap_matrix(frame_t* self, char* matrix, size_t width, size_t height)
 {
 	bool error = true;
@@ -229,6 +229,7 @@ static bool _image_add_frame(image_t* self, frame_t* frame)
 static void _screen_dtor(screen_t* self)
 {
 	free_memory((void**)&(self->_render_array));
+	free_memory((void**)&(self->_render_surface));
 }
 
 /* get number of images to be rendered */
@@ -579,26 +580,25 @@ int main()
 	if (!screen.add_image(&screen, &image))
 		status = STATUS_START;
 
-	/* destruct garbage */
-	frame.dtor(&frame);
-	image.dtor(&image);
-
 	/* keep track of the image shift */
 	point_t shift = { 7, 5 };
 
 	/* main loop */
-	while (true) {
+	bool run = true;
+	while (run) {
 		/* handle program status */
 		switch (status) {
 			case STATUS_EXIT:
 				/* terminate program */
 				printf("\nBye, Human!\n");
-				exit(EXIT_SUCCESS);
+				run = false;
+				break;
 
 			case STATUS_ERROR:
 				/* print error message and exit */
 				printf("\nERROR: Something went wrong, Human!\n");
-				exit(EXIT_FAILURE);
+				run = false;
+				break;
 
 			case STATUS_START:
 				/* print welcome message */
@@ -660,4 +660,15 @@ int main()
 				status = STATUS_IDLE;
 		}
 	}
+
+	/* destruct objects */
+	screen.dtor(&screen);
+	image.dtor(&image);
+	frame.dtor(&frame);
+
+	/* exit type */
+	if (status == STATUS_ERROR)
+		return EXIT_FAILURE;
+	else
+		return EXIT_SUCCESS;
 }
