@@ -554,10 +554,21 @@ int main()
 	char menu_array[] = "\nPlease, enter an option:\n| W - Move up | S - Move down | A - Move left | D - Move right |\n| P - Align automaticly | O - EXIT |\n";
 
 	char* pixel_matrix[] = { 
-		"  o   |#|  _|_ ",
-		" |o|   #  _| |_",
-		" =o=   O   | | ",
-		" ;o;   H   1 1 "
+		"                                                                                          MMM                     M                        M                        M  M                 MMMMMM    M            MM    M M  M            M     M   MM                  M     M                                          M                MM     M M                 M   M                     M M    M                         M                         M                        M                         M                         MM                       M                                                                                  ",
+		"                                                                                           MMM                     M                        M   M                    M  M                 MMMMMMM   M            MM    M M  M            M     M   M                   M     M                                          M                M      M M                 M   M  M                  M M    M                  M      M                                                  M                         M                                                  M                                                                                 ",
+		"                                                                                           MMM                     M   M                    M   M                       M                  MMMMMM   M             M    M M  M            M     M                       M    MM                                          M                M      M                   M   M  M                  M M    M                  M      M                        M                         M                                                  M                         M                                                                                 ",
+		"                                                                                            M                       M  M                    M   M                        M                     MMM                 MMM MM   M            MM    M  M  M                 M     M                  M    M                  M                M      MM                 M       M                  M  M                  M                                                  M                         M                        MM                                                                                                                     ",
+		"                                                                                                                    MMM                         M                        M                     MMM                   MMMM                  MM  M     MM           M    M   M M                  M   MM                  M                        M                 M     M M                 M   M  M                  MM M   M                   M                              M                                                  M                        M                         M                                                         ",
+		"                                                                                                                    MMM                         M                        M                     M  M                   MMM                    MMMMM                 MM  M  M                M       M MM                 M   MM                   M                       M                  MM    M M                  MM                         MM   M                        M                                                  M                        M                         M                                                          ",
+		"                                                                                                                     MM                      M  M                    M   M                     M  M                    MMMM                   MM M                   MMM  M                  M M      M              M  M  MMM                   M                        M                       M                  MMM   M M                    MMM M                        M                                                                           M                        M                                                            ",
+		"                                                                                                                     MM                      M  M                        M                     M  M                     MMM                    MM                     MM M                    MM M                     M   MMMM                M M                        M                        M                        M                   MMMMMMM                                                                                                                                                                                          ",
+		"                                                                                                                     MM                         M                    M   M                     M  M                     MMM                    MM                      MM                      MMM                      M  M                     M                       M                          M                         M                   MMMMMM                  M                                                                             M                        M                        MM                                     ",
+		"                                                                                                                    MMM                     M   M                    M   M                     M M                    MMM                    MMMM                      M                       M M                         M                    MMM                      M M                      MM M                     M                       MMM                                               M                        M                        M                        M                        MM                                      ",
+		"                                                                                                                   M  M                     M                        M                        MMMM                 MM MM                     MM M                     MM M                     MM                       MM                      M M M                    M   M                    M  MM                        M                   M  M                     MMM                                              M                        M                        M                                                                 ",
+		"                                                                                            M                      M  M                     M                        M  M                   MMMMM                  M  MM                    M   M                    M M M                    MM  M                    MM   M                   M M  M                   M  M  M                 M    M                   M    M                       M                   M   M                       M                    M   M                    M                       M                                                                   ",
+		"                                                                                           MM                      M  M                     M                        M  M                  MMMMMM                  M   MM                  M   M M                     M  M                        M                    M     M                 M M      M               M  M                    M    M                                           M     M                M       M               M       M               M        M               M        M                                                                                     ",
+		"                                                                                           MM                      M  M                     M                        M  M                 MMMMMM                  M    MM                 M    M                  M    M   M MM                     M                   M                       M M                     M   M                    M    M            MMMMMMM                  M                                                                                                               MM                                                                                   ",
+		"                                                                                           MMM                     M                        M                        M  M                 MMMMMM     M           MM    M M   M           M     M   M M                 M     M                                          M               M       M M              M M    M                    MM M    M                  M      M                                                  M                                                  M                         M                                                                                 "
 	};
 
 	frame_t frame;
@@ -567,22 +578,22 @@ int main()
 	screen_t screen;
 	screen_ctor(&screen);
 
-	for (int i = 0; i < 4; ++i) {
-		if (!frame.swap_matrix(&frame, pixel_matrix[i], 5, 3)) {
+	for (int i = 0; i < 15; i++) {
+		if (!frame.swap_matrix(&frame, pixel_matrix[i], 25, 25)) {
 			if (image.add_frame(&image, &frame))
 				break;
 		}
 	}
 
-	screen.set_size(&screen, 20, 10);
-	screen.set_frame_rate(&screen, 8);
+	screen.set_size(&screen, 25, 25);
+	screen.set_frame_rate(&screen, 60);
 	screen.swap_menu(&screen, menu_array);
 
 	if (!screen.add_image(&screen, &image))
 		status = STATUS_START;
 
 	/* keep track of the image shift */
-	point_t shift = { 7, 5 };
+	point_t shift = { 0, 0 };
 
 	/* main loop */
 	bool run = true;
