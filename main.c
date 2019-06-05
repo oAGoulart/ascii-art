@@ -340,7 +340,7 @@ static point_t _screen_calculate_pixel_pos(screen_t* self, size_t colunm, size_t
 }
 
 /* find image aligned position */
-static point_t _screen_find_image_aligned_pos(struct screen_s* self, size_t image_index)
+static point_t _screen_find_image_aligned_pos(screen_t* self, size_t image_index)
 {
 	point_t result = { 0, 0 };
 	image_t* tmp_image_ptr = &self->_render_array[image_index];
@@ -373,7 +373,7 @@ static void _screen_render(screen_t* self)
 					self->_frame_delta = clock();
 
 					/* for each image */
-					for (int i = 0; i < self->_images_count; i++) {
+					for (size_t i = 0; i < self->_images_count; i++) {
 						/* store current image */
 						image_t* tmp_image_ptr = &self->_render_array[i];
 
@@ -381,7 +381,7 @@ static void _screen_render(screen_t* self)
 						frame_t* tmp_frame_ptr = &tmp_image_ptr->_frame_array[tmp_image_ptr->_curr_frame];
 
 						/* iterate through pixel matrix and calculate each element position */
-						for (int j = 0, k = 0; k < tmp_frame_ptr->_height; j++) {
+						for (size_t j = 0, k = 0; k < tmp_frame_ptr->_height; j++) {
 							/* control counters */
 							if (j >= tmp_frame_ptr->_width) {
 								j = 0;
@@ -408,7 +408,7 @@ static void _screen_render(screen_t* self)
 					clear_cli();
 
 					/* render screen surface */
-					for (int j = 0; j < buff_size; j++) {
+					for (size_t j = 0; j < buff_size; j++) {
 						/* output to stdout */
 						if (self->_render_surface[j] == '\0')
 							putchar(' ');
