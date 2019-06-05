@@ -29,7 +29,6 @@
 #if defined(_WIN32) || defined(_WIND64) || defined(__MINGW32__) || defined (__MINGW64__)
 	#define WINDOWS
 
-	#include <winsock.h>
 	#include <winsock2.h>
 #else /* assume POSIX */
 	#include <sys/select.h>
