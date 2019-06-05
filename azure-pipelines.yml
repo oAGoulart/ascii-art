@@ -35,7 +35,7 @@ jobs:
   steps:
   - task: CMake@1
     inputs:
-      cmakeArgs: '-A x64 $(Build.SourcesDirectory)'
+      cmakeArgs: '-A x64 -DCMAKE_HOST_SYSTEM_NAME=Windows $(Build.SourcesDirectory)'
 
   - task: MSBuild@1
     inputs:
@@ -50,7 +50,7 @@ jobs:
   steps:
   - task: CMake@1
     inputs:
-      cmakeArgs: '-A Win32 $(Build.SourcesDirectory)'
+      cmakeArgs: '-A Win32 -DCMAKE_HOST_SYSTEM_NAME=Windows $(Build.SourcesDirectory)'
 
   - task: MSBuild@1
     inputs:
