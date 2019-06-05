@@ -2,8 +2,8 @@
  *
  *  ASCII Art Animation Algorithm: Using Object-Oriented Concepts in C
  *    - Implementation using Object-Oriented concepts,
- *      most of it is just structs emulating the functionalities 
- *      of classes (mostly like in C++). e.g.: methods,
+ *      most of it is just structs emulating the functionalities
+ *      of classes (mostly based on C++). e.g.: methods,
  *      constructors, and destructors. This is not a
  *      pure implementation of Object-Oriented Programming
  *      but rather an use of its concepts to try and
@@ -12,8 +12,8 @@
  *  by Augusto Goulart
  *
  *
- *  NOTE: not all Object-Oriented  concepts could be implemented in C,
- *    at least not in an easy and fast manner, this code is intended for 
+ *  NOTE: not all Object-Oriented concepts could be implemented here nor I wanted
+ *    to do it, at least not in an easy and fast manner, this code is intended for 
  *    learning and educational pourposes only, and it may not work properly.
  *
  *                    --- Do not delete this comment block ---
@@ -37,6 +37,14 @@
 #endif
 
 #define SECOND_MS 1000 /* how many miliseconds are there in a second */
+
+/* NOTE: you may wanna change the macros below */
+#define NUM_FRAMES 15    /* number of frames will be loaded */
+#define FRAME_WIDTH 25   /* width of frames */
+#define FRAME_HEIGHT 25  /* height of frames */
+#define SCREEN_WIDTH 25  /* width of the screen */
+#define SCREEN_HEIGHT 25 /* height of the screen */
+#define FRAME_RATE 60    /* how many frames to be rendered per second */
 
 /* declare functions (forward declarations) */
 void free_memory(void** ptr);
@@ -551,9 +559,11 @@ int main()
 	status_t status = STATUS_ERROR;
 
 	/* initialize stuff */
+	/* menu for the user */
 	char menu_array[] = "\nPlease, enter an option:\n| W - Move up | S - Move down | A - Move left | D - Move right |\n| P - Align automaticly | O - EXIT |\n";
 
-	char* pixel_matrix[] = { 
+	/* each line is a frame (DO NOT USE LINE BREAKS - those are put during rendering) */
+	char* pixel_matrix[NUM_FRAMES] = { 
 		"                                                                                          MMM                     M                        M                        M  M                 MMMMMM    M            MM    M M  M            M     M   MM                  M     M                                          M                MM     M M                 M   M                     M M    M                         M                         M                        M                         M                         MM                       M                                                                                  ",
 		"                                                                                           MMM                     M                        M   M                    M  M                 MMMMMMM   M            MM    M M  M            M     M   M                   M     M                                          M                M      M M                 M   M  M                  M M    M                  M      M                                                  M                         M                                                  M                                                                                 ",
 		"                                                                                           MMM                     M   M                    M   M                       M                  MMMMMM   M             M    M M  M            M     M                       M    MM                                          M                M      M                   M   M  M                  M M    M                  M      M                        M                         M                                                  M                         M                                                                                 ",
@@ -578,22 +588,24 @@ int main()
 	screen_t screen;
 	screen_ctor(&screen);
 
-	for (int i = 0; i < 15; i++) {
-		if (!frame.swap_matrix(&frame, pixel_matrix[i], 25, 25)) {
+	/* initialize image */
+	for (int i = 0; i < NUM_FRAMES; i++) {
+		if (!frame.swap_matrix(&frame, pixel_matrix[i], FRAME_WIDTH, FRAME_HEIGHT)) {
 			if (image.add_frame(&image, &frame))
 				break;
 		}
 	}
 
-	screen.set_size(&screen, 25, 25);
-	screen.set_frame_rate(&screen, 60);
+	/* set screen values */
+	screen.set_size(&screen, SCREEN_WIDTH, SCREEN_HEIGHT); 
+	screen.set_frame_rate(&screen, FRAME_RATE);
 	screen.swap_menu(&screen, menu_array);
 
 	if (!screen.add_image(&screen, &image))
 		status = STATUS_START;
 
 	/* keep track of the image shift */
-	point_t shift = { 0, 0 };
+	point_t shift = { 17, 17 };
 
 	/* main loop */
 	bool run = true;
@@ -678,7 +690,7 @@ int main()
 	image.dtor(&image);
 	frame.dtor(&frame);
 
-	/* exit type */
+	/* exit */
 	if (status == STATUS_ERROR)
 		return EXIT_FAILURE;
 	else
