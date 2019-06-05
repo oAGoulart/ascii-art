@@ -108,7 +108,7 @@ typedef struct screen_s {
 	size_t   _height;         /* height of the screen */
 	short    _frame_rate;     /* rate of frames per second (hertz) */
 	clock_t  _frame_delta;    /* delta time between frames */
-	char*    _interface;      /* array that represents the menu interface */
+	char*    _menu;           /* array that represents the menu interface */
 
 	/* declare methods */
 	void (*dtor)(struct screen_s* self);
@@ -121,7 +121,7 @@ typedef struct screen_s {
 	size_t (*get_height)(struct screen_s* self);
 	short (*get_frame_rate)(struct screen_s* self);
 	void (*set_frame_rate)(struct screen_s* self, const short frame_rate);
-	void (*swap_interface)(struct screen_s* self, char* interface);
+	void (*swap_menu)(struct screen_s* self, char* menu);
 
 	bool (*add_image)(struct screen_s* self, image_t* image);
 	double (*calculate_frame_delta)(struct screen_s* self);
@@ -287,10 +287,10 @@ static void _screen_set_frame_rate(screen_t* self, const short frame_rate)
 }
 
 /* copy @interface value to @self->_interface */
-static void _screen_swap_interface(screen_t* self, char* interface)
+static void _screen_swap_menu(screen_t* self, char* menu)
 {
-	if (self != NULL && interface != NULL)
-		self->_interface = interface;
+	if (self != NULL && menu != NULL)
+		self->_menu = menu;
 }
 
 /* copy @image pointer to @self->_render_array */
@@ -421,7 +421,8 @@ static void _screen_render(screen_t* self)
 					}
 
 					/* render screen menu */
-					printf("%s", self->_interface);
+					if (self->_menu != NULL)
+						printf("%s", self->_menu);
 				}
 			}
 		}
@@ -471,6 +472,7 @@ static void screen_ctor(screen_t* self)
 		self->_height = 0;
 		self->_frame_rate = 0;
 		self->_frame_delta = clock();
+		self->_menu = NULL;
 		self->dtor = &_screen_dtor;
 		self->get_images_count = &_screen_get_images_count;
 		self->set_size = &_screen_set_size;
@@ -480,7 +482,7 @@ static void screen_ctor(screen_t* self)
 		self->get_height = &_screen_get_height;
 		self->get_frame_rate = &_screen_get_frame_rate;
 		self->set_frame_rate = &_screen_set_frame_rate;
-		self->swap_interface = &_screen_swap_interface;
+		self->swap_menu = &_screen_swap_menu;
 		self->add_image = &_screen_add_image;
 		self->calculate_frame_delta = &_screen_calculate_frame_delta;
 		self->calculate_pixel_pos = &_screen_calculate_pixel_pos;
