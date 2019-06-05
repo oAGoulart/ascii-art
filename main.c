@@ -29,6 +29,7 @@
 #if defined(_WIN32) || defined(_WIND64) || defined(__MINGW32__) || defined (__MINGW64__)
 	#define WINDOWS
 
+	/* WARNING: link Ws2_32.lib on windows or this file won't compile */
 	#include <winsock2.h>
 #else /* assume POSIX */
 	#include <sys/select.h>
@@ -329,12 +330,12 @@ static double _screen_calculate_frame_delta(screen_t* self)
 /* calculate pixel position (using @self->_relative_pos) on screen */
 static point_t _screen_calculate_pixel_pos(screen_t* self, size_t colunm, size_t line)
 {
-	point_t result = { colunm, line };
+	point_t result = { (int)colunm, (int)line };
 
 	if (self != NULL) {
 		/* calculate and store actual colunm/line position after shift */
-		result._x = ((self->_width + self->_relative_pos._x) + colunm) % self->_width;
-		result._y = ((self->_height + self->_relative_pos._y) + line) % self->_height;
+		result._x = (int)(((self->_width + self->_relative_pos._x) + colunm) % self->_width);
+		result._y = (int)(((self->_height + self->_relative_pos._y) + line) % self->_height);
 	}
 
 	return result;
@@ -348,8 +349,8 @@ static point_t _screen_find_image_aligned_pos(screen_t* self, size_t image_index
 	frame_t* tmp_frame_ptr = &tmp_image_ptr->_frame_array[tmp_image_ptr->_curr_frame];
 
 	if (self != NULL) {
-		result._x = find_ceil((self->_width - tmp_frame_ptr->_width - 2) / 2);
-		result._y = find_ceil((self->_height - tmp_frame_ptr->_height - 2) / 2);
+		result._x = find_ceil((double)(self->_width - tmp_frame_ptr->_width - 2) / 2);
+		result._y = find_ceil((double)(self->_height - tmp_frame_ptr->_height - 2) / 2);
 	}
 
 	return result;
