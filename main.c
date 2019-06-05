@@ -549,7 +549,7 @@ int main()
 	status_t status = STATUS_ERROR;
 
 	/* initialize stuff */
-	char menu_interface[] = "\nPlease, enter an option:\n| W - Move up | S - Move down | A - Move left | D - Move right |\n| P - Align automaticly | O - EXIT |\n";
+	char menu_array[] = "\nPlease, enter an option:\n| W - Move up | S - Move down | A - Move left | D - Move right |\n| P - Align automaticly | O - EXIT |\n";
 
 	char* pixel_matrix[] = { 
 		"  o   |#|  _|_ ",
@@ -574,7 +574,7 @@ int main()
 
 	screen.set_size(&screen, 20, 10);
 	screen.set_frame_rate(&screen, 8);
-	screen.swap_interface(&screen, menu_interface);
+	screen.swap_menu(&screen, menu_array);
 
 	if (!screen.add_image(&screen, &image))
 		status = STATUS_START;
