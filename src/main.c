@@ -152,7 +152,7 @@ static char _frame_get_pixel(frame_t* self, size_t colunm, size_t line)
 	char result = '\0';
 
 	if (self != NULL)
-	 result = (colunm < self->_width && line < self->_height) ? self->_pixel_matrix[colunm + (line * self->_width)] : result;
+		result = (colunm < self->_width && line < self->_height) ? self->_pixel_matrix[colunm + (line * self->_width)] : result;
 
 	return result;
 }
@@ -563,7 +563,7 @@ int main()
 	char menu_array[] = "\nPlease, enter an option:\n| W - Move up | S - Move down | A - Move left | D - Move right |\n| P - Align automaticly | O - EXIT |\n";
 
 	/* each line is a frame (DO NOT USE LINE BREAKS - those are put during rendering) */
-	char* pixel_matrix[NUM_FRAMES] = { 
+	char* pixel_matrix[NUM_FRAMES] = {
 		"                                                                                          MMM                     M                        M                        M  M                 MMMMMM    M            MM    M M  M            M     M   MM                  M     M                                          M                MM     M M                 M   M                     M M    M                         M                         M                        M                         M                         MM                       M                                                                                  ",
 		"                                                                                           MMM                     M                        M   M                    M  M                 MMMMMMM   M            MM    M M  M            M     M   M                   M     M                                          M                M      M M                 M   M  M                  M M    M                  M      M                                                  M                         M                                                  M                                                                                 ",
 		"                                                                                           MMM                     M   M                    M   M                       M                  MMMMMM   M             M    M M  M            M     M                       M    MM                                          M                M      M                   M   M  M                  M M    M                  M      M                        M                         M                                                  M                         M                                                                                 ",
