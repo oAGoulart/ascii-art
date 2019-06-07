@@ -17,7 +17,9 @@
 	#include <Wincrypt.h>
 
 	#define MS_CONTAINER_NAME "oagoulart-rand-lotto"
-#else
+
+	#define SCANF scanf_s
+#else /* assume POSIX */
 	#ifndef _XOPEN_SOURCE
 	#define _XOPEN_SOURCE
 	#endif
@@ -26,6 +28,8 @@
 	#endif
 
 	#include <stdlib.h>
+
+	#define SCANF scanf
 #endif
 
 /* define games rules */
@@ -56,7 +60,7 @@ void wait_til(const size_t milisec)
 	clock_t init_clock = clock();
 
 	/* loop for given time */
-	while ((clock() - init_clock) / (CLOCKS_PER_SEC / 1000) < milisec);
+	while ((size_t)(clock() - init_clock) / (CLOCKS_PER_SEC / 1000) < milisec);
 }
 
 /* generate random data and store to buffer */
@@ -82,7 +86,7 @@ bool generate_random_data(void* buffer, const size_t size)
 		address[i] = (uint8_t)random();
 #endif
 
-	return ~error;
+	return !error;
 }
 
 /* clear cli screem */
@@ -140,40 +144,40 @@ void generate_game(const option_t game)
 {
 	if (game == OPTION_MEGA || game == OPTION_QUINA) {
 		/* define constants */
-		const int game_ten_min = (game == OPTION_MEGA) ? MEGA_TEN_MIN : QUINA_TEN_MIN;
-		const int game_ten_max = (game == OPTION_MEGA) ? MEGA_TEN_MAX : QUINA_TEN_MAX;
-		const int game_num_min = (game == OPTION_MEGA) ? MEGA_NUM_MIN : QUINA_NUM_MIN;
-		const int game_num_max = (game == OPTION_MEGA) ? MEGA_NUM_MAX : QUINA_NUM_MAX;
+		const size_t game_ten_min = (game == OPTION_MEGA) ? MEGA_TEN_MIN : QUINA_TEN_MIN;
+		const size_t game_ten_max = (game == OPTION_MEGA) ? MEGA_TEN_MAX : QUINA_TEN_MAX;
+		const size_t game_num_min = (game == OPTION_MEGA) ? MEGA_NUM_MIN : QUINA_NUM_MIN;
+		const size_t game_num_max = (game == OPTION_MEGA) ? MEGA_NUM_MAX : QUINA_NUM_MAX;
 
 		/* get number of bets */
-		uint32_t num_bets = 0;
+		size_t num_bets = 0;
 
 		do {
 			printf("\nHuman, enter the number of bets: ");
-			scanf("%u%*c", &num_bets);
+			SCANF("%lu%*c", (unsigned long*)&num_bets);
 		} while (num_bets < 1);
 
 		/* get number of tens */
-		uint32_t num_tens = 0;
+		size_t num_tens = 0;
 
 		do {
-			printf("\nHuman, enter the number of tens [min: %d max: %d]: ", game_ten_min, game_ten_max);
-			scanf("%u%*c", &num_tens);
+			printf("\nHuman, enter the number of tens [min: %lu max: %lu]: ", (unsigned long)game_ten_min, (unsigned long)game_ten_max);
+			SCANF("%lu%*c", (unsigned long*)&num_tens);
 		} while (num_tens < game_ten_min || num_tens > game_ten_max);
 
 		/* generate game */
 		printf("... Processing arguments ... Connecting to SkyNet ...\n");
 		wait_til(500); /* fake processing time :P */
 
-		for (int i = 0; i < num_bets; i++) {
+		for (size_t i = 0; i < num_bets; i++) {
 			uint8_t* buffer = NULL;
 
 			/* verify memory was allocated */
 			if ((buffer = malloc(num_tens)) != NULL) {
-				printf("\nGame %d: ", i + 1);
+				printf("\nGame %lu: ", (unsigned long)i + 1);
 
 				if (generate_random_data(buffer, num_tens)) {
-					for (int j = 0; j < num_tens; j++)
+					for (size_t j = 0; j < num_tens; j++)
 						printf(" %u ", buffer[j] % game_num_max + game_num_min);
 				}
 				else {
@@ -193,7 +197,7 @@ void generate_game(const option_t game)
 		/* go back to main loop */
 		printf("\n - - - - - - - - - - - - - - - - - - - - - - - - - - -\n");
 		printf("Human, type something to restart:\n");
-		scanf("%*c%*c");
+		SCANF("%*c%*c");
 	}
 }
 
