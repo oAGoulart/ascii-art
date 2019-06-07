@@ -73,7 +73,7 @@ bool generate_random_data(void* buffer, const size_t size)
 	HCRYPTPROV prov_handle;
 
 	if (CryptAcquireContextA(&prov_handle, MS_CONTAINER_NAME, MS_DEF_PROV, PROV_RSA_FULL, CRYPT_SILENT)) {
-		error = ~CryptGenRandom(prov_handle, size, address);
+		error = ~CryptGenRandom(prov_handle, (DWORD)size, address);
 		CryptReleaseContext(prov_handle, 0);
 	}
 #else
@@ -89,7 +89,7 @@ bool generate_random_data(void* buffer, const size_t size)
 	return !error;
 }
 
-/* clear cli screem */
+/* clear cli screen */
 void clear_cli()
 {
 #ifdef WINDOWS
@@ -178,7 +178,7 @@ void generate_game(const option_t game)
 
 				if (generate_random_data(buffer, num_tens)) {
 					for (size_t j = 0; j < num_tens; j++)
-						printf(" %u ", buffer[j] % game_num_max + game_num_min);
+						printf(" %u ", (uint8_t)(buffer[j] % game_num_max + game_num_min));
 				}
 				else {
 					printf("error [0x534E] - coundn't connect to SkyNet!\nExtermination has been started automatically...");
