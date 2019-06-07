@@ -11,9 +11,10 @@
 	#ifndef _WIN32_WINNT
  	#define _WIN32_WINNT 0x0501
  	#endif
+	#include <Windows.h>
 
 	/* WARNING: link Advapi32.lib on windows or this file won't compile */
-	#include <wincrypt.h>
+	#include <Wincrypt.h>
 
 	#define MS_CONTAINER_NAME "oagoulart-rand-lotto"
 #else
