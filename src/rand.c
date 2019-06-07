@@ -8,6 +8,10 @@
 #if defined(_WIN32) || defined(_WIND64) || defined(__MINGW32__) || defined (__MINGW64__)
 	#define WINDOWS
 
+	#ifndef _WIN32_WINNT
+ 	#define _WIN32_WINNT 0x0501
+ 	#endif
+
 	/* WARNING: link Advapi32.lib on windows or this file won't compile */
 	#include <wincrypt.h>
 
