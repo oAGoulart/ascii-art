@@ -46,7 +46,7 @@ typedef enum option_e {
 } option_t;
 
 /* wait given amout of miliseconds */
-void wait(size_t milisec)
+void wait_til(const size_t milisec)
 {
 	clock_t init_clock = clock();
 
@@ -55,7 +55,7 @@ void wait(size_t milisec)
 }
 
 /* generate random data and store to buffer */
-bool generate_random_data(void* buffer, size_t size)
+bool generate_random_data(void* buffer, const size_t size)
 {
 	uint8_t* address = buffer;
 	bool error = true;
@@ -131,7 +131,7 @@ option_t draw_menu()
 }
 
 /* generate game for human */
-void generate_game(option_t game)
+void generate_game(const option_t game)
 {
 	if (game == OPTION_MEGA || game == OPTION_QUINA) {
 		/* define constants */
@@ -141,7 +141,7 @@ void generate_game(option_t game)
 		const int game_num_max = (game == OPTION_MEGA) ? MEGA_NUM_MAX : QUINA_NUM_MAX;
 
 		/* get number of bets */
-		size_t num_bets = 0;
+		uint32_t num_bets = 0;
 
 		do {
 			printf("\nHuman, enter the number of bets: ");
@@ -149,7 +149,7 @@ void generate_game(option_t game)
 		} while (num_bets < 1);
 
 		/* get number of tens */
-		size_t num_tens = 0;
+		uint32_t num_tens = 0;
 
 		do {
 			printf("\nHuman, enter the number of tens [min: %d max: %d]: ", game_ten_min, game_ten_max);
@@ -158,7 +158,7 @@ void generate_game(option_t game)
 
 		/* generate game */
 		printf("... Processing arguments ... Connecting to SkyNet ...\n");
-		wait(500); /* fake processing time :P */
+		wait_til(500); /* fake processing time :P */
 
 		for (int i = 0; i < num_bets; i++) {
 			uint8_t* buffer = NULL;
