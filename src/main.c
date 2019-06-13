@@ -143,7 +143,7 @@ typedef struct screen_s {
 /* frame_t object destructor */
 static void _frame_dtor(frame_t* self)
 {
-	//free_memory((void**)&(self->_pixel_matrix));
+	/*free_memory((void**)&(self->_pixel_matrix));*/
 }
 
 /* get pixel value in given position */
@@ -514,11 +514,11 @@ void free_memory(void** ptr)
 /* clear cli output stream */
 void clear_cli()
 {
-	#ifdef WINDOWS
-		system("cls");
-	#else
-		system("clear && printf '\e[3J'");
-	#endif
+#ifdef WINDOWS
+	system("cls");
+#else
+	system("clear && printf '\e[3J'");
+#endif
 }
 
 /* get char from stdin with timeout */

@@ -53,7 +53,7 @@
 #define QUINA_NUM_MAX 80
 
 /* define data types */
-typedef unsigned char uint8_t;
+typedef unsigned char uint8_t; /* may be already defined under stdint.h */
 typedef unsigned long ulong_t;
 
 typedef enum option_e {
@@ -72,17 +72,40 @@ void wait_til(const size_t milisec)
 	while ((size_t)(clock() - init_clock) / (CLOCKS_PER_SEC / 1000) < milisec);
 }
 
+/* how many times this number appears */
+size_t find_array_occur(uint8_t* array, const size_t size, const uint8_t key)
+{
+	int found = 0;
+
+	if (array != NULL) {
+		for (size_t i = 0; i < size; i++) {
+			if (array[i] == key)
+				found++;
+		}
+	}
+
+	return found;
+}
+
 /* generate random data and store to buffer */
-bool generate_random_data(void* buffer, const size_t size)
+bool generate_random_data(void* buffer, const size_t size, const size_t min, const size_t max)
 {
 	uint8_t* address = buffer;
 	bool error = true;
 
+/* NOTE: Windows implementation hasn't been fully tested yet */
 #ifdef WINDOWS
 	HCRYPTPROV prov_handle;
 
 	if (CryptAcquireContextA(&prov_handle, MS_CONTAINER_NAME, MS_DEF_PROV, PROV_RSA_FULL, CRYPT_SILENT)) {
-		error = ~CryptGenRandom(prov_handle, (DWORD)size, address);
+
+		for (size_t i = 0; i < size; i++) {
+			do {
+				error = ~CryptGenRandom(prov_handle, (DWORD)size, address);
+				address[i] = address[i] % max + min;
+			} while (find_array_occur(buffer, size, address[i]) > 1);
+		}
+
 		CryptReleaseContext(prov_handle, 0);
 	}
 #else
@@ -91,8 +114,11 @@ bool generate_random_data(void* buffer, const size_t size)
 
 	initstate(timer + clock(), state, strlen(state));
 
-	for (int i = 0; i < size; i++)
-		address[i] = (uint8_t)random();
+	for (size_t i = 0; i < size; i++) {
+		do {
+			address[i] = (uint8_t)random() % max + min;
+		} while (find_array_occur(buffer, size, address[i]) > 1);
+	}
 
 	error = false;
 #endif
@@ -114,6 +140,21 @@ void clear_cli()
 char to_upper(const char letter)
 {
 	return (letter >= 97 && letter <= 122) ? letter - 32 : letter;
+}
+
+/* compare two bytes values */
+int comp_byte(const void* a, const void* b)
+{
+	int result = 1;
+
+	if (a != NULL && b != NULL) {
+		if (*(uint8_t*)a < *(uint8_t*)b)
+			result = -1;
+		else if (*(uint8_t*)a == *(uint8_t*)b)
+			result = -1;
+	}
+
+	return result;
 }
 
 /* draw menu and get user option */
@@ -187,9 +228,11 @@ void generate_game(const option_t game)
 			if ((buffer = malloc(num_tens)) != NULL) {
 				printf("\nGame %lu: ", i + 1);
 
-				if (generate_random_data(buffer, num_tens)) {
+				if (generate_random_data(buffer, num_tens, game_num_min, game_num_max)) {
+					qsort(buffer, num_tens, 1, comp_byte);
+
 					for (ulong_t j = 0; j < num_tens; j++)
-						printf(" %u ", (uint8_t)(buffer[j] % game_num_max + game_num_min));
+						printf(" %u ", (uint8_t)buffer[j]);
 				}
 				else {
 					printf("error [0x534E] - coundn't connect to SkyNet!\nExtermination has been started automatically...");
