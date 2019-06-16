@@ -3,6 +3,7 @@ project(ascii-art VERSION 0.1.0.0 LANGUAGES C)
 
 add_executable(main src/main.c)
 add_executable(rand src/rand.c)
+add_executable(memory src/memory.c)
 
 if(CMAKE_HOST_SYSTEM_NAME STREQUAL "Windows")
 	target_link_libraries(main Ws2_32.lib)
