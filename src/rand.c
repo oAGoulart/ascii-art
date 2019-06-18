@@ -102,7 +102,7 @@ bool generate_random_data(void* buffer, const size_t size, const size_t min, con
 		for (size_t i = 0; i < size; i++) {
 			do {
 				error = ~CryptGenRandom(prov_handle, (DWORD)size, address);
-				address[i] = (uint8_t)address[i] % max + min;
+				address[i] = (uint8_t)(address[i] % max + min);
 			} while (find_array_occur(buffer, size, address[i]) > 1);
 		}
 
