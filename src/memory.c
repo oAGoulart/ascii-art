@@ -8,8 +8,8 @@
 	#define WINDOWS
 
 	/* WARNING: link Kernel32.lib and Ws2_32.lib on windows */
-	#ifndef _WIN32_WINNT
- 	#define _WIN32_WINNT 0x0501
+	#ifndef WIN32_LEAN_AND_MEAN
+ 	#define WIN32_LEAN_AND_MEAN
  	#endif
 	#include <Windows.h>
 	#include <Memoryapi.h>
