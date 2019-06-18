@@ -8,6 +8,9 @@
 	#define WINDOWS
 
 	/* WARNING: link Kernel32.lib and Ws2_32.lib on windows */
+	#ifndef _WIN32_WINNT
+ 	#define _WIN32_WINNT 0x0501
+ 	#endif
 	#include <Windows.h>
 	#include <Memoryapi.h>
 	#include <winsock2.h>
