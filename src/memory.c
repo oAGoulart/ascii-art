@@ -86,13 +86,13 @@ static void set_jump(void* address, void* dest, const bool vp)
 {
 	if (address != NULL && dest != NULL) {
 		/* find destination offset */
-		ulong_t offset = dest - (address + 1 + sizeof(ulong_t*));
+		ulong_t offset = dest - (address + 1 + sizeof(long*));
 
 		/* write opcode */
 		set_raw(address, &JMP_OPCODE, 1, true);
 
 		/* write destination offset */
-		set_raw(address + 1, &offset, sizeof(ulong_t*), true);
+		set_raw(address + 1, &offset, sizeof(long*), true);
 	}
 }
 
@@ -122,7 +122,7 @@ int main()
 	if (getchar())
 		set_jump(&getchar, &get_char, true);
 
-	printf("%x %x %x %x %x\n%x\n", *addr, *(addr + 1), *(addr + 2), *(addr + 3), *(addr + 4), (int)&getchar);
+	printf("%x %x %x %x %x\n%x\n", *addr, *(addr + 1), *(addr + 2), *(addr + 3), *(addr + 4), *(int*)&getchar);
 
 	while (1) {
 		if (getchar() == EOF)
