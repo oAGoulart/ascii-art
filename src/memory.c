@@ -24,7 +24,14 @@
 	#define MEM_PROT PROT_READ | PROT_EXEC
 #endif
 
-typedef unsigned long ulong_t;
+#if defined(__ILP32__) || defined(_ILP32) || defined(__i386__) || defined(_M_IX86) || defined(_X86_)
+	#define X86
+
+	typedef uint32_t ulong_t;
+#else /* assume 64-bit */
+	typedef uint64_t ulong_t;
+#endif
+
 typedef unsigned char ubyte_t;
 
 /* asm cmds */
@@ -79,13 +86,13 @@ static void set_jump(void* address, void* dest, const bool vp)
 {
 	if (address != NULL && dest != NULL) {
 		/* find destination offset */
-		ulong_t offset = dest - (address + 1 + sizeof(long));
+		ulong_t offset = (ulong_t)dest - ((ulong_t)address + 1 + sizeof(ulong_t));
 
 		/* write opcode */
 		set_raw(address, &JMP_OPCODE, 1, true);
 
 		/* write destination offset */
-		set_raw(address + 1, &offset, sizeof(long), true);
+		set_raw((void*)(ulong_t)address + 1, &offset, sizeof(ulong_t), true);
 	}
 }
 
@@ -111,7 +118,7 @@ static int get_char()
 int main()
 {
 	ubyte_t* addr = (void*)&getchar;
-
+	printf("%d\n", sizeof(ulong_t));
 	if (getchar())
 		set_jump(&getchar, &get_char, true);
 
