@@ -2,12 +2,99 @@
 #include <string.h>
 #include <stdint.h>
 #include <stdbool.h>
-#include <unistd.h>
-#include <sys/select.h>
-#include <sys/mman.h>
 
-#define UBYTE uint8_t
-#define JMP_OPCODE 0xE9
+/* platform specific stuff */
+#if defined(_WIN32) || defined(_WIND64) || defined(__MINGW32__) || defined (__MINGW64__)
+	#define WINDOWS
+
+	/* WARNING: link Kernel32.lib on windows */
+	#include <Windows.h>
+	#include <Memoryapi.h>
+
+	/* default memory protection modes */
+	#define MEM_NO_PROT PAGE_EXECUTE_READWRITE
+	#define MEM_PROT PAGE_EXECUTE_READ
+#else /* assume POSIX */
+	#include <unistd.h>
+	#include <sys/select.h>
+	#include <sys/mman.h>
+
+	/* default memory protection modes */
+	#define MEM_NO_PROT PROT_READ | PROT_WRITE | PROT_EXEC
+	#define MEM_PROT PROT_READ | PROT_EXEC
+#endif
+
+#if defined(__ILP32__) || defined(_ILP32)
+	#define X86
+
+	typedef uint32_t ulong_t;
+#else /* assume 64-bit */
+	typedef uint64_t ulong_t;
+#endif
+
+typedef unsigned char ubyte_t;
+
+/* asm cmds */
+const uint8_t JMP_OPCODE = 233;
+
+/* set memory virtual protection */
+static int virtual_protect(void* address, const size_t size, const int mode) {
+	int old_mode = -1;
+
+	if (address != NULL && size > 0) {
+#ifdef WINDOWS
+		VirtualProtect((LPVOID)address, size, mode, &old_mode);
+#else
+		/* get size of pages */
+		long page_sz = sysconf(_SC_PAGESIZE);
+
+		/* find page pointer */
+		void* page_ptr = (long*)((long)address & ~(page_sz - 1));
+
+		/* use the macro definition of protected memory */
+		old_mode = (mprotect(page_ptr, size, mode) == 0) ? MEM_PROT : -2;
+#endif
+	}
+
+	return old_mode;
+}
+
+/* write assembly command into memory */
+static void set_raw(void* address, const void* data, const size_t size, const bool vp)
+{
+	if (address != NULL && data != NULL && size > 0) {
+		if (vp) {
+			/* store previous memory protection mode */
+			int old_mode = MEM_PROT;
+
+			/* try to remove virtual protection */
+			if ((old_mode = virtual_protect(address, size, MEM_NO_PROT)) ) {
+				/* write data into memory */
+				memcpy(address, data, size);
+
+				/* reset virtual protection */
+				virtual_protect(address, size, old_mode);
+			}
+		}
+		else
+			memcpy(address, data, size);
+	}
+}
+
+/* set jump into address */
+static void set_jump(void* address, void* dest, const bool vp)
+{
+	if (address != NULL && dest != NULL) {
+		/* find destination offset */
+		ulong_t offset = dest - (address + 1 + sizeof(void*));
+
+		/* write opcode */
+		set_raw(address, &JMP_OPCODE, 1, true);
+
+		/* write destination offset */
+		set_raw(address + 1, &offset, sizeof(void*), true);
+	}
+}
 
 /* get char from stdin without blocking */
 static int get_char()
@@ -19,7 +106,7 @@ static int get_char()
 	FD_ZERO(&readfds);
 	FD_SET(0, &readfds);
 
-	struct timeval timeout = { 0 , 0 };
+	struct timeval timeout = { 0, 0 };
 
 	/* verify stdin is not empty */
 	if (select(1, &readfds, NULL, NULL, &timeout))
@@ -28,52 +115,17 @@ static int get_char()
 	return result;
 }
 
-/* set memory virtual protection */
-static bool virtual_protect(void* address, size_t size, bool vp) {
-  long page_size = sysconf(_SC_PAGESIZE);
-
-  /* find page pointer */
-  void* page_ptr = (void*)((long)address & ~(page_size - 1));
-
-  if (!vp)
-    return (mprotect(page_ptr, size, PROT_READ | PROT_WRITE | PROT_EXEC) == 0);
-  else
-    return (mprotect(page_ptr, size, PROT_READ | PROT_EXEC) == 0);
-}
-
-/* set jump into address */
-static void set_jump(void* address, void* destination)
-{
-	/* try to remove virtual protection */
-	if (virtual_protect(address, 1 + sizeof(void*), false)) {
-		UBYTE* byte_addr = address;
-
-		/* find destination offset */
-		uint32_t offset = (uint32_t)(destination - (address + 5));
-
-		/* put jump opcode */
-		*byte_addr = JMP_OPCODE;
-
-		/* put offset after opcode */
-		memcpy(byte_addr + 1, &offset, sizeof(uint32_t));
-
-		/* reset virtual protection */
-		virtual_protect(address, 1 + sizeof(void*), true);
-	}
-}
-
 int main()
 {
-	UBYTE* addr = (void*)&getchar;
+	ubyte_t* addr = (void*)&getchar;
 
 	if (getchar())
-		set_jump(&getchar, &get_char);
+		set_jump(&getchar, &get_char, true);
 
 	printf("%x %x %x %x %x\n%x\n", *addr, *(addr + 1), *(addr + 2), *(addr + 3), *(addr + 4), (unsigned int)&getchar);
 
 	while (1) {
-		if (getchar() > 0) {
+		if (getchar() == EOF)
 			printf("Let's hook this baby!\n");
-		}
 	}
 }
