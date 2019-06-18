@@ -7,9 +7,10 @@
 #if defined(_WIN32) || defined(_WIND64) || defined(__MINGW32__) || defined (__MINGW64__)
 	#define WINDOWS
 
-	/* WARNING: link Kernel32.lib on windows */
+	/* WARNING: link Kernel32.lib and Ws2_32.lib on windows */
 	#include <Windows.h>
 	#include <Memoryapi.h>
+	#include <winsock2.h>
 
 	/* default memory protection modes */
 	#define MEM_NO_PROT PAGE_EXECUTE_READWRITE
