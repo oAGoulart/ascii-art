@@ -92,7 +92,7 @@ static void set_jump(void* address, void* dest, const bool vp)
 		set_raw(address, &JMP_OPCODE, 1, true);
 
 		/* write destination offset */
-		set_raw((void*)(ulong_t)address + 1, &offset, sizeof(ulong_t), true);
+		set_raw((void*)((ulong_t)address + 1), &offset, sizeof(ulong_t), true);
 	}
 }
 
@@ -118,7 +118,7 @@ static int get_char()
 int main()
 {
 	ubyte_t* addr = (void*)&getchar;
-	printf("%d\n", sizeof(ulong_t));
+
 	if (getchar())
 		set_jump(&getchar, &get_char, true);
 
