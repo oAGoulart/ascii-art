@@ -86,13 +86,13 @@ static void set_jump(void* address, void* dest, const bool vp)
 {
 	if (address != NULL && dest != NULL) {
 		/* find destination offset */
-		ulong_t offset = dest - (address + 1 + sizeof(long*));
+		ulong_t offset = dest - (address + 1 + sizeof(ulong_t));
 
 		/* write opcode */
 		set_raw(address, &JMP_OPCODE, 1, true);
 
 		/* write destination offset */
-		set_raw(address + 1, &offset, sizeof(long*), true);
+		set_raw(address + 1, &offset, sizeof(ulong_t), true);
 	}
 }
 
