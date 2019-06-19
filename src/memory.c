@@ -45,6 +45,7 @@ const uint8_t JMP_OPCODE = 233;
 static void set_memory_protection(const void* address, const size_t size, const int mode) {
 	if (address != NULL && size > 0) {
 #ifdef WINDOWS
+		int old_mode;
 		VirtualProtect((LPVOID)address, size, mode, &old_mode);
 #else
 		/* get size of pages */
