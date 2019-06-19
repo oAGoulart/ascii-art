@@ -7,7 +7,7 @@
 #if defined(_WIN32) || defined(_WIND64) || defined(__MINGW32__) || defined (__MINGW64__)
 	#define WINDOWS
 
-	/* WARNING: link Kernel32.lib and Ws2_32.lib on windows */
+	/* NOTE: link Kernel32.lib and Ws2_32.lib on windows */
 	#ifndef WIN32_LEAN_AND_MEAN
  	#define WIN32_LEAN_AND_MEAN
  	#endif
@@ -16,7 +16,7 @@
 	#include <winsock2.h>
 
 	/* default memory protection modes */
-	#define MEM_NO_PROT PAGE_EXECUTE_READWRITE
+	#define MEM_UNPROT PAGE_EXECUTE_READWRITE
 	#define MEM_PROT PAGE_EXECUTE_READ
 #else /* assume POSIX */
 	#include <unistd.h>
@@ -24,7 +24,7 @@
 	#include <sys/mman.h>
 
 	/* default memory protection modes */
-	#define MEM_NO_PROT PROT_READ | PROT_WRITE | PROT_EXEC
+	#define MEM_UNPROT PROT_READ | PROT_WRITE | PROT_EXEC
 	#define MEM_PROT PROT_READ | PROT_EXEC
 #endif
 
@@ -41,10 +41,8 @@ typedef unsigned char ubyte_t;
 /* asm cmds */
 const uint8_t JMP_OPCODE = 233;
 
-/* set memory virtual protection */
-static int virtual_protect(void* address, const size_t size, const int mode) {
-	int old_mode = -1;
-
+/* set memory protection */
+static void set_memory_protection(const void* address, const size_t size, const int mode) {
 	if (address != NULL && size > 0) {
 #ifdef WINDOWS
 		VirtualProtect((LPVOID)address, size, mode, &old_mode);
@@ -55,30 +53,56 @@ static int virtual_protect(void* address, const size_t size, const int mode) {
 		/* find page pointer */
 		void* page_ptr = (long*)((long)address & ~(page_sz - 1));
 
-		/* use the macro definition of protected memory */
-		old_mode = (mprotect(page_ptr, size, mode) == 0) ? MEM_PROT : -2;
+		/* no previous mode to be returned */
+		mprotect(page_ptr, size, mode);
+#endif
+	}
+}
+
+static int memory_get_protection(void* address) {
+	int result = 0;
+
+	if (address != NULL) {
+#ifdef WINDOWS
+		MEMORY_BASIC_INFORMATION page_info;
+		if (VirtualQuery(address, &page_info, sizeof(MEMORY_BASIC_INFORMATION)) == sizeof(MEMORY_BASIC_INFORMATION))
+			result = page_info.Protect;
+#else
+		FILE* maps = fopen("/proc/self/maps", "r"); /* currently mapped memory regions */
+		uintptr_t block[2] = { 0, 0 };              /* block of memory addresses */
+		char perms[5];                              /* set of permissions */
+
+		/* parse file lines */
+		while (fscanf(maps, "%x-%x %4s %*x %*d:%*d %*d %*s\n", &block[0], &block[1], perms) == 3) {
+			if (block[0] <= (uintptr_t)address && block[1] >= (uintptr_t)address) {
+				result |= (perms[0] == 'r') ? PROT_READ : PROT_NONE;  /* can be readed */
+				result |= (perms[1] == 'w') ? PROT_WRITE : PROT_NONE; /* can be written */
+				result |= (perms[2] == 'x') ? PROT_EXEC : PROT_NONE;  /* can be executed */
+				break;
+			}
+		}
 #endif
 	}
 
-	return old_mode;
+	return result;
 }
 
-/* write assembly command into memory */
+/* write data into memory */
 static void set_raw(void* address, const void* data, const size_t size, const bool vp)
 {
 	if (address != NULL && data != NULL && size > 0) {
 		if (vp) {
-			/* store previous memory protection mode */
-			int old_mode = MEM_PROT;
+			/* store memory protection for later */
+			int old_mode = memory_get_protection(address);
 
-			/* try to remove virtual protection */
-			if ((old_mode = virtual_protect(address, size, MEM_NO_PROT)) ) {
-				/* write data into memory */
-				memcpy(address, data, size);
+			/* remove virtual protection */
+			set_memory_protection(address, size, MEM_UNPROT);
 
-				/* reset virtual protection */
-				virtual_protect(address, size, old_mode);
-			}
+			/* write data into memory */
+			memcpy(address, data, size);
+
+			/* reset virtual protection */
+			set_memory_protection(address, size, old_mode);
 		}
 		else
 			memcpy(address, data, size);
@@ -86,7 +110,7 @@ static void set_raw(void* address, const void* data, const size_t size, const bo
 }
 
 /* set jump into address */
-static void set_jump(void* address, void* dest, const bool vp)
+static void set_jump(void* address, const void* dest, const bool vp)
 {
 	if (address != NULL && dest != NULL) {
 		/* find destination offset */
@@ -129,7 +153,6 @@ int main()
 	printf("%x %x %x %x %x\n%x\n", *addr, *(addr + 1), *(addr + 2), *(addr + 3), *(addr + 4), *(int*)&getchar);
 
 	while (1) {
-		if (getchar() == EOF)
-			printf("Let's hook this baby!\n");
+		printf("Let's hook this baby! %c\n", getchar());
 	}
 }
