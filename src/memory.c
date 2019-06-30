@@ -19,6 +19,7 @@
 	#define MEM_UNPROT PAGE_EXECUTE_READWRITE
 	#define MEM_PROT PAGE_EXECUTE_READ
 #else /* assume POSIX */
+	#include <sys/types.h>
 	#include <unistd.h>
 	#include <sys/select.h>
 	#include <sys/mman.h>
@@ -125,6 +126,26 @@ static void set_jump(void* address, const void* dest, const bool vp)
 	}
 }
 
+#ifndef WINDOWS
+/* get process base address */
+static ulong_t process_get_base_address(const pid_t pid)
+{
+	ulong_t base_addr = 0x0; /* base address */
+	char path[FILENAME_MAX]; /* path to file */
+
+	if (sprintf(path, "/proc/%d/maps", pid) >= 0) {
+		FILE* maps = fopen(path, "r"); /* process mapped memory regions */
+
+		if (maps != NULL) {
+			fscanf(maps, "%x-%*x %*s %*x %*d:%*d %*d %*s\n", &base_addr);
+			fclose(maps);
+		}
+	}
+
+	return base_addr;
+}
+#endif
+
 /* get char from stdin without blocking */
 static int get_char()
 {
@@ -151,7 +172,7 @@ int main()
 	if (getchar())
 		set_jump(&getchar, &get_char, true);
 
-	printf("%x %x %x %x %x\n%x\n", *addr, *(addr + 1), *(addr + 2), *(addr + 3), *(addr + 4), *(int*)&getchar);
+	printf("%x %x %x %x %x\n%lx\n", *addr, *(addr + 1), *(addr + 2), *(addr + 3), *(addr + 4), (long)&getchar);
 
 	while (1) {
 		printf("Let's hook this baby! %c\n", getchar());
