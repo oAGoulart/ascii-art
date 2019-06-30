@@ -24,7 +24,7 @@
 #include <stdbool.h>
 
 /* configurations */
-#define MAX_CMD_LENGTH 256
+#define MAX_DISPLAY_NAME 64
 
 /* platform specific stuff */
 #if defined(_WIN32) || defined(_WIND64) || defined(__MINGW32__) || defined (__MINGW64__)
@@ -129,12 +129,33 @@ int get_char()
 
 #ifndef __WINDOWS__
 /* get primary display output name */
-char* get_active_display_name()
+bool get_active_display_name(char* name, const size_t name_sz)
 {
-	/* get primary display name */
-	system("export PRIMARY_OUTPUT=$(xrandr | grep ' connected primary' | awk '{ print $1 }')");
+	bool success = false;
 
-	return getenv("PRIMARY_OUTPUT");
+	/* get primary display name */
+	system("xrandr | grep \" connected primary\" | awk '{ print $1 }' >/tmp/harvest_config");
+
+	char line[name_sz];
+	FILE* file = fopen("/tmp/harvest_config", "r");
+
+	/* get file value */
+	if (file != NULL) {
+		if ((fgets(line, name_sz, file)) != NULL) {
+			for (int i = 0; i < name_sz; i++) {
+				if (line[i] != '\n')
+					name[i] = line[i];
+				else {
+					name[i] = '\0';
+					break;
+				}
+			}
+
+			success = true;
+		}
+	}
+
+	return success;
 }
 #endif
 
@@ -232,11 +253,11 @@ void terminate_screen_framebuffer(framebuffer_t* fb)
 		}
 
 		/* get current output display */
-		char* display = get_active_display_name();
+		char display[MAX_DISPLAY_NAME];
 
-		if (display != NULL) {
+		if (get_active_display_name(display, MAX_DISPLAY_NAME)) {
 			/* refresh display output */
-			char cmd[MAX_CMD_LENGTH];
+			char cmd[BUFSIZ];
 			sprintf(cmd, "xrandr --output %s --off && xrandr --output %s --auto", display, display);
 			system(cmd);
 		}
@@ -389,7 +410,7 @@ int main()
 				printf("\x1b[107m%s", "\x1b[97m.");
 		}
 
-		if (get_char() == ' ')
+		if (get_char() == '\'')
 			break;
 	}
 
