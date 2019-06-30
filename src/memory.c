@@ -128,7 +128,7 @@ static void set_jump(void* address, const void* dest, const bool vp)
 
 #ifndef WINDOWS
 /* get process base address */
-static ulong_t process_get_base_address(const pid_t pid)
+ulong_t process_get_base_address(const pid_t pid)
 {
 	ulong_t base_addr = 0x0; /* base address */
 	char path[FILENAME_MAX]; /* path to file */
@@ -172,7 +172,7 @@ int main()
 	if (getchar())
 		set_jump(&getchar, &get_char, true);
 
-	printf("%x %x %x %x %x\n%lx\n", *addr, *(addr + 1), *(addr + 2), *(addr + 3), *(addr + 4), (long)&getchar);
+	printf("%x %x %x %x %x\n%p\n", *addr, *(addr + 1), *(addr + 2), *(addr + 3), *(addr + 4), &getchar);
 
 	while (1) {
 		printf("Let's hook this baby! %c\n", getchar());
