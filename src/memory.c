@@ -75,7 +75,11 @@ static int memory_get_protection(void* address) {
 		char perms[5];                              /* set of permissions */
 
 		/* parse file lines */
-		while (fscanf(maps, "%x-%x %4s %*x %*d:%*d %*d %*s\n", &block[0], &block[1], perms) == 3) {
+	#ifdef X86
+			while (fscanf(maps, "%x-%x %4s %*x %*d:%*d %*d %*s\n", &block[0], &block[1], perms) == 3) {
+	#else
+			while (fscanf(maps, "%lx-%lx %4s %*x %*d:%*d %*d %*s\n", &block[0], &block[1], perms) == 3) {
+	#endif
 			if (block[0] <= (uintptr_t)address && block[1] >= (uintptr_t)address) {
 				result |= (perms[0] == 'r') ? PROT_READ : PROT_NONE;  /* can be readed */
 				result |= (perms[1] == 'w') ? PROT_WRITE : PROT_NONE; /* can be written */
@@ -137,7 +141,11 @@ ulong_t process_get_base_address(const pid_t pid)
 		FILE* maps = fopen(path, "r"); /* process mapped memory regions */
 
 		if (maps != NULL) {
+	#ifdef X86
 			fscanf(maps, "%x-%*x %*s %*x %*d:%*d %*d %*s\n", &base_addr);
+	#else
+			fscanf(maps, "%lx-%*lx %*s %*lx %*d:%*d %*d %*s\n", &base_addr);
+	#endif
 			fclose(maps);
 		}
 	}

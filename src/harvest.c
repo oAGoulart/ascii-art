@@ -23,9 +23,13 @@
 #include <stdint.h>
 #include <stdbool.h>
 
+/* configurations */
+#define MAX_CMD_LENGTH 256
+
 /* platform specific stuff */
 #if defined(_WIN32) || defined(_WIND64) || defined(__MINGW32__) || defined (__MINGW64__)
-	#define WINDOWS
+	#undef __WINDOWS__
+	#define __WINDOWS__ 1
 	
 	#ifndef WIN32_LEAN_AND_MEAN
 	#define WIN32_LEAN_AND_MEAN
@@ -52,7 +56,8 @@
 
 /* define data types */
 #if defined(__ILP32__) || defined(_ILP32) || defined(__i386__) || defined(_M_IX86) || defined(_X86_)
-	#define X86
+	#undef __X86_ARCH__
+	#define __X86_ARCH__ 1
 
 	typedef uint32_t ulong_t;
 #else /* assume 64-bit */
@@ -78,7 +83,7 @@ typedef struct console_s
 
 typedef struct framebuffer_s
 {
-#ifdef WINDOWS
+#ifdef __WINDOWS__
 	HWND       window;             /* window handler */
 	HDC        device;             /* device handler */
 	position_t resolution;         /* window resolution in pixels */
@@ -102,9 +107,9 @@ int get_char()
 {
 	char result = EOF;
 
-#ifdef WINDOWS
+#ifdef __WINDOWS__
 	/* verify keyboard was hit */
-	if (_kbhit()) /* FIXME: having some delay */
+	if (_kbhit())
 		result = _getch();
 #else
 	/* define select() values */
@@ -122,13 +127,24 @@ int get_char()
 	return result;
 }
 
+#ifndef __WINDOWS__
+/* get primary display output name */
+char* get_active_display_name()
+{
+	/* get primary display name */
+	system("export PRIMARY_OUTPUT=$(xrandr | grep ' connected primary' | awk '{ print $1 }')");
+
+	return getenv("PRIMARY_OUTPUT");
+}
+#endif
+
 /* initialize screen frame buffer */
 bool init_screen_framebuffer(framebuffer_t* fb)
 {
 	bool success = false;
 
 	if (fb != NULL) {
-#ifdef WINDOWS
+#ifdef __WINDOWS__
 		/* get window and device */
 		if ((fb->window = GetConsoleWindow()) != NULL) {
 			if ((fb->device = GetDC(fb->window)) != NULL) {
@@ -194,7 +210,7 @@ bool init_screen_framebuffer(framebuffer_t* fb)
 void terminate_screen_framebuffer(framebuffer_t* fb)
 {
 	if (fb != NULL) {
-#ifdef WINDOWS
+#ifdef __WINDOWS__
 		if (fb->window != NULL) {
 			SetWindowLongPtr(fb->window, GWL_STYLE, fb->orig_win_style);
 			SetWindowLongPtr(fb->window, GWL_EXSTYLE, fb->orig_win_ext_style);
@@ -216,12 +232,14 @@ void terminate_screen_framebuffer(framebuffer_t* fb)
 		}
 
 		/* get current output display */
-		char display[64] = "VGA1"; /* TODO: make this get the primary output source */
+		char* display = get_active_display_name();
 
-		/* refresh display output */
-		char cmd[256];
-		sprintf(cmd, "xrandr --output %s --off && xrandr --output %s --auto", display, display);
-		system(cmd);
+		if (display != NULL) {
+			/* refresh display output */
+			char cmd[MAX_CMD_LENGTH];
+			sprintf(cmd, "xrandr --output %s --off && xrandr --output %s --auto", display, display);
+			system(cmd);
+		}
 #endif
 	}
 }
@@ -231,7 +249,7 @@ console_mode_t set_cli_input_mode(const console_mode_t mode)
 {
 	console_mode_t old_mode;
 
-#ifdef WINDOWS
+#ifdef __WINDOWS__
 	HANDLE console = GetStdHandle(STD_INPUT_HANDLE);
 
 	if (GetConsoleMode(console, &old_mode))
@@ -247,7 +265,7 @@ console_mode_t set_cli_input_mode(const console_mode_t mode)
 /* change cli input cursor status */
 void show_cli_input_cursor(const bool show)
 {
-#ifdef WINDOWS
+#ifdef __WINDOWS__
 	HANDLE console = GetStdHandle(STD_OUTPUT_HANDLE);
 
 	CONSOLE_CURSOR_INFO info = (show) ? (CONSOLE_CURSOR_INFO){ 25, true } : (CONSOLE_CURSOR_INFO){ 1, false };
@@ -263,7 +281,7 @@ void show_cli_input_cursor(const bool show)
 /* get cli cursor position */
 void set_cli_cursor_pos(const size_t column, const size_t row)
 {
-#ifdef WINDOWS
+#ifdef __WINDOWS__
 	COORD position = { (short)column, (short)row };
 
 	SetConsoleCursorPosition(GetStdHandle(STD_OUTPUT_HANDLE), position);
@@ -277,7 +295,7 @@ position_t get_cli_size()
 {
 	position_t size = { 0, 0 };
 
-#ifdef WINDOWS
+#ifdef __WINDOWS__
 	CONSOLE_SCREEN_BUFFER_INFO info;
 
 	if (GetConsoleScreenBufferInfo(GetStdHandle(STD_OUTPUT_HANDLE), &info)) {
@@ -299,7 +317,7 @@ position_t get_cli_size()
 /* clear cli output stream */
 void clear_cli()
 {
-#ifdef WINDOWS
+#ifdef __WINDOWS__
 	system("cls");
 #else
 	system("clear && printf '\e[3J'");
@@ -311,7 +329,7 @@ int main()
 	/* get cli raw input */
 	console_t cli;
 
-#ifdef WINDOWS
+#ifdef __WINDOWS__
 	cli.mode = ~(ENABLE_LINE_INPUT | ENABLE_PROCESSED_INPUT | ENABLE_WINDOW_INPUT | ENABLE_INSERT_MODE);
 	cli.old_mode = set_cli_input_mode(cli.mode);
 #else
@@ -330,7 +348,7 @@ int main()
 
 	while (true) {
 		if (init_screen_framebuffer(&fb)) {
-#ifdef WINDOWS
+#ifdef __WINDOWS__
 			for (int i = 0; i < 9000; i++) {
 				int x = rand() % fb.resolution.x;
 				int y = rand() % fb.resolution.y;
