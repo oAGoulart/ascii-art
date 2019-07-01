@@ -22,9 +22,54 @@
 #include <string.h>
 #include <stdint.h>
 #include <stdbool.h>
+#include <stdarg.h>
 
 /* configurations */
 #define MAX_DISPLAY_NAME 64
+
+/* console colors */
+typedef enum cli_deco_e {
+	DECO_RESET            = 0,
+	DECO_BOLD             = 1,
+	DECO_UNDERSCORE       = 4,
+	DECO_NONE             = 5,
+											/* foreground */
+	FOREGROUND_BLACK      = 30,
+	FOREGROUND_RED        = 31,
+	FOREGROUND_GREEN      = 32,
+	FOREGROUND_YELLOW     = 33,
+	FOREGROUND_BLUE       = 34,
+	FOREGROUND_MAGENTA    = 35,
+	FOREGROUND_CYAN       = 36,
+	FOREGROUND_WHITE      = 37,
+											/* foreground bright */
+	FOREGROUND_BR_BLACK   = 90,
+	FOREGROUND_BR_RED     = 91,
+	FOREGROUND_BR_GREEN   = 92,
+	FOREGROUND_BR_YELLOW  = 93,
+	FOREGROUND_BR_BLUE    = 94,
+	FOREGROUND_BR_MAGENTA = 95,
+	FOREGROUND_BR_CYAN    = 96,
+	FOREGROUND_BR_WHITE   = 97,
+											/* background */
+	BACKGROUND_BLACK      = 40,
+	BACKGROUND_RED        = 41,
+	BACKGROUND_GREEN      = 42,
+	BACKGROUND_YELLOW     = 43,
+	BACKGROUND_BLUE       = 44,
+	BACKGROUND_MAGENTA    = 45,
+	BACKGROUND_CYAN       = 46,
+	BACKGROUND_WHITE      = 47,
+											/* background bright */
+	BACKGROUND_BR_BLACK   = 100,
+	BACKGROUND_BR_RED     = 101,
+	BACKGROUND_BR_GREEN   = 102,
+	BACKGROUND_BR_YELLOW  = 103,
+	BACKGROUND_BR_BLUE    = 104,
+	BACKGROUND_BR_MAGENTA = 105,
+	BACKGROUND_BR_CYAN    = 106,
+	BACKGROUND_BR_WHITE   = 107
+} cli_deco_t;
 
 /* platform specific stuff */
 #if defined(_WIN32) || defined(_WIND64) || defined(__MINGW32__) || defined (__MINGW64__)
@@ -75,7 +120,6 @@ typedef struct position_s
 
 typedef struct console_s
 {
-	console_mode_t mode;         /* current mode */
 	console_mode_t old_mode;     /* previous mode */
 	position_t     size;         /* console size (columns X rows) */
 	double         aspect_ratio; /* aspect ratio from console size */
@@ -87,9 +131,7 @@ typedef struct framebuffer_s
 	HWND       window;             /* window handler */
 	HDC        device;             /* device handler */
 	position_t resolution;         /* window resolution in pixels */
-	LONG_PTR   orig_win_style;     /* original window style */
 	LONG_PTR   win_style;          /* current window style */
-	LONG_PTR   orig_win_ext_style; /* original window extended style */
 	LONG_PTR   win_ext_style;      /* current window extended style */
 #else
 	int                      fd;            /* file descriptor */
@@ -109,6 +151,7 @@ int get_char()
 
 #ifdef __WINDOWS__
 	/* verify keyboard was hit */
+	/* NOTE: lagging input */
 	if (_kbhit())
 		result = _getch();
 #else
@@ -125,6 +168,38 @@ int get_char()
 #endif
 
 	return result;
+}
+
+/* write decorated format string to stream */
+/* TODO: Improve this function */
+void fprintf_deco(FILE* stream, const cli_deco_t frgd_color, const cli_deco_t bkgd_color, const cli_deco_t style, const char* format, ...)
+{
+	va_list args;
+	va_start(args, format);
+
+	/* append color format */
+	char* str = malloc(BUFSIZ);
+
+	if (str != NULL) {
+		/* old windows versions don't support colored output */
+#ifdef __WINDOWS__
+		int size = vsprintf(str, format, args);
+
+		DWORD written;
+		WriteConsoleW(GetStdHandle(STD_OUTPUT_HANDLE), str, size, &written, NULL);
+#else
+		sprintf(str, "\e[%dm\e[%dm\e[%dm", frgd_color, bkgd_color, style);
+		strcat(str, format);
+		strcat(str, "\e[0m");
+
+		/* final string */
+		vfprintf(stream, str, args);
+#endif
+
+		free(str);
+	}
+
+	va_end(args);
 }
 
 #ifndef __WINDOWS__
@@ -153,7 +228,13 @@ bool get_active_display_name(char* name, const size_t name_sz)
 
 			success = true;
 		}
+
+		/* clean up */
+		fclose(file);
 	}
+
+	/* remove temporary file */
+	remove("/tmp/harvest_config");
 
 	return success;
 }
@@ -169,17 +250,13 @@ bool init_screen_framebuffer(framebuffer_t* fb)
 		/* get window and device */
 		if ((fb->window = GetConsoleWindow()) != NULL) {
 			if ((fb->device = GetDC(fb->window)) != NULL) {
-				/* get original window styles */
-				fb->orig_win_style = GetWindowLongPtr(fb->window, GWL_STYLE);
-				fb->orig_win_ext_style = GetWindowLongPtr(fb->window, GWL_EXSTYLE);
-
 				/* modify styles */
-				fb->win_style = fb->orig_win_style;
+				fb->win_style = GetWindowLongPtr(fb->window, GWL_STYLE);
 				fb->win_style &= ~WS_BORDER;
 				fb->win_style &= ~WS_DLGFRAME;
 				fb->win_style &= ~WS_THICKFRAME;
 
-				fb->win_ext_style = fb->orig_win_ext_style;
+				fb->win_ext_style = GetWindowLongPtr(fb->window, GWL_EXSTYLE);
 				fb->win_ext_style &= ~WS_EX_WINDOWEDGE;
 
 				SetWindowLongPtr(fb->window, GWL_STYLE, fb->win_style | WS_POPUP);
@@ -195,6 +272,7 @@ bool init_screen_framebuffer(framebuffer_t* fb)
 		}
 
 #else
+		/* NOTE: this is not the finest approach but it is the fastest */
 		/* set system default frame buffer */
 		system("export FRAMEBUFFER=/dev/fb0");
 
@@ -233,9 +311,10 @@ void terminate_screen_framebuffer(framebuffer_t* fb)
 	if (fb != NULL) {
 #ifdef __WINDOWS__
 		if (fb->window != NULL) {
-			SetWindowLongPtr(fb->window, GWL_STYLE, fb->orig_win_style);
-			SetWindowLongPtr(fb->window, GWL_EXSTYLE, fb->orig_win_ext_style);
+			SetWindowLongPtr(fb->window, GWL_STYLE, WS_OVERLAPPEDWINDOW);
+			SetWindowLongPtr(fb->window, GWL_EXSTYLE, WS_EX_OVERLAPPEDWINDOW);
 			ShowWindow(fb->window, SW_SHOWDEFAULT);
+			MoveWindow(fb->window, 0, 0, 480, 360, true);
 
 			if (fb->device != NULL) {
 				ReleaseDC(fb->window, fb->device);
@@ -283,14 +362,28 @@ console_mode_t set_cli_input_mode(const console_mode_t mode)
 	return old_mode;
 }
 
+/* change terminal mode to raw and return old one */
+console_mode_t set_cli_raw_mode()
+{
+	console_mode_t mode;
+
+#ifdef __WINDOWS__
+	mode = ~(ENABLE_LINE_INPUT | ENABLE_PROCESSED_INPUT | ENABLE_WINDOW_INPUT | ENABLE_INSERT_MODE);
+#else
+	cfmakeraw(&mode);
+#endif
+
+	return set_cli_input_mode(mode);
+}
+
 /* change cli input cursor status */
 void show_cli_input_cursor(const bool show)
 {
+/* FIXME: not working properly on windows */
 #ifdef __WINDOWS__
-	HANDLE console = GetStdHandle(STD_OUTPUT_HANDLE);
-
 	CONSOLE_CURSOR_INFO info = (show) ? (CONSOLE_CURSOR_INFO){ 25, true } : (CONSOLE_CURSOR_INFO){ 1, false };
-	SetConsoleCursorInfo(console, &info);
+
+	SetConsoleCursorInfo(GetStdHandle(STD_OUTPUT_HANDLE), &info);
 #else
 	if (show)
 		printf("\e[?25h");
@@ -300,14 +393,15 @@ void show_cli_input_cursor(const bool show)
 }
 
 /* get cli cursor position */
+/* FIXME: Not going to the right position on Windows */
 void set_cli_cursor_pos(const size_t column, const size_t row)
 {
 #ifdef __WINDOWS__
 	COORD position = { (short)column, (short)row };
 
-	SetConsoleCursorPosition(GetStdHandle(STD_OUTPUT_HANDLE), position);
+	SetConsoleCursorPosition(GetStdHandle(STD_INPUT_HANDLE), position);
 #else
-	printf("\033[%d;%dH", row, column);
+	printf("\e[%d;%dH", row, column);
 #endif
 }
 
@@ -338,6 +432,7 @@ position_t get_cli_size()
 /* clear cli output stream */
 void clear_cli()
 {
+	/* FIXME: Not cleaning quite well on Windows */
 #ifdef __WINDOWS__
 	system("cls");
 #else
@@ -347,16 +442,10 @@ void clear_cli()
 
 int main()
 {
-	/* get cli raw input */
 	console_t cli;
 
-#ifdef __WINDOWS__
-	cli.mode = ~(ENABLE_LINE_INPUT | ENABLE_PROCESSED_INPUT | ENABLE_WINDOW_INPUT | ENABLE_INSERT_MODE);
-	cli.old_mode = set_cli_input_mode(cli.mode);
-#else
-	cfmakeraw(&cli.mode);
-	cli.old_mode = set_cli_input_mode(cli.mode);
-#endif
+	/* get cli raw input */
+	cli.old_mode = set_cli_raw_mode();
 
 	/* hide cli text cursor */
 	show_cli_input_cursor(false);
@@ -364,17 +453,48 @@ int main()
 	/* clear cli */
 	clear_cli();
 
-	/* init frame buffer */
+	while (true) {
+		/* store cli size and aspect ratio */
+		cli.size = get_cli_size();
+		cli.aspect_ratio = (double)cli.size.x / cli.size.y;
+
+		for (size_t i = 1, j = 1; j <= cli.size.y; i++) {
+			if (i > cli.size.x) {
+				i = 1;
+				j++;
+			}
+
+			set_cli_cursor_pos(i, j);
+
+			if (1 == j) {
+				if (i == 1)
+					fprintf_deco(stdout, FOREGROUND_CYAN, BACKGROUND_MAGENTA, DECO_NONE, "%s", "\u250C"); /* TODO: Make Windows support Unicode */
+				else
+					fprintf_deco(stdout, FOREGROUND_CYAN, BACKGROUND_MAGENTA, DECO_NONE, "%s", "\u2500");
+			}
+			else if (i == 1)
+				fprintf_deco(stdout, FOREGROUND_CYAN, BACKGROUND_MAGENTA, DECO_NONE, "%s", "\u2502");
+			else
+				fprintf_deco(stdout, FOREGROUND_BR_WHITE, BACKGROUND_BR_WHITE, DECO_NONE, "%c", '.');
+		}
+
+		if (get_char() == ' ')
+			break;
+	}
+
+		/* init frame buffer */
 	framebuffer_t fb;
 
 	while (true) {
 		if (init_screen_framebuffer(&fb)) {
+			/* TODO: Clear Windows screen properly before rendering */
 #ifdef __WINDOWS__
 			for (int i = 0; i < 9000; i++) {
 				int x = rand() % fb.resolution.x;
 				int y = rand() % fb.resolution.y;
 				SetPixel(fb.device, x, y, RGB(rand() % 255, rand() % 255, rand() % 255));
 			}
+			/* TODO: Clear console framebuffer after rendering */
 #else
 			memset(fb.address, 0x0, fb.size);
 			for (int i = 0; i < 9000; i++) {
@@ -389,30 +509,6 @@ int main()
 	}
 
 	terminate_screen_framebuffer(&fb);
-
-	while (true) {
-		/* store cli size and aspect ratio */
-		cli.size = get_cli_size();
-		cli.aspect_ratio = (double)cli.size.x / cli.size.y;
-
-		for (size_t i = 1, j = 1; j <= cli.size.y; i++) {
-			if (i > cli.size.x) {
-				i = 1;
-				j++;
-			}
-
-			set_cli_cursor_pos(i, j);
-			if (1 == j)
-				printf("\x1b[102m%s", "\x1b[92m_");
-			else if (i == 1)
-				printf("\x1b[102m%s", "\x1b[92m|");
-			else
-				printf("\x1b[107m%s", "\x1b[97m.");
-		}
-
-		if (get_char() == '\'')
-			break;
-	}
 
 	/* reset terminal values */
 	clear_cli();
