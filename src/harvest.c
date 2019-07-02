@@ -109,23 +109,33 @@ typedef enum cli_deco_e {
 	#define __X86_ARCH__ 1
 
 	typedef uint32_t ulong_t;
+	typedef int32_t long_t;
 #else /* assume 64-bit */
 	typedef uint64_t ulong_t;
+	typedef int64_t long_t;
 #endif
 
 typedef unsigned char ubyte_t;
 
+/* define function macros */
+#define ABS(x) ((x < 0) ? x * -1 : x)
+#define SGN(x) ((x < 0) ? -1 : (x == 0) ? 0 : 1)
+#define IPART(x) ((int)x)
+#define FPART(x) (x - IPART(x))
+#define RFPART(x) (1 - FPART(x))
+#define ROUND(x) (IPART(x + 0.5f))
+
 /* define struct types */
-typedef struct position_s
+typedef struct vertice_s
 {
-	size_t x;
-	size_t y;
-} position_t;
+	long_t x;
+	long_t y;
+} vertice_t;
 
 typedef struct console_s
 {
 	console_mode_t old_mode;     /* previous mode */
-	position_t     size;         /* console size (columns X rows) */
+	vertice_t      size;         /* console size (columns X rows) */
 	double         aspect_ratio; /* aspect ratio from console size */
 } console_t;
 
@@ -134,7 +144,7 @@ typedef struct framebuffer_s
 #ifdef __WINDOWS__
 	HWND       window;             /* window handler */
 	HDC        device;             /* device handler */
-	position_t resolution;         /* window resolution in pixels */
+	vertice_t  resolution;         /* window resolution in pixels */
 	LONG_PTR   win_style;          /* current window style */
 	LONG_PTR   win_ext_style;      /* current window extended style */
 #else
@@ -147,6 +157,13 @@ typedef struct framebuffer_s
 #endif
 } framebuffer_t;
 
+/* swap two integer values */
+void swap(long_t* a, long_t* b)
+{
+	int c = *a;
+	*a = *b;
+	*b = c;
+}
 
 /* get char from stdin without blocking */
 int get_char()
@@ -204,6 +221,90 @@ void fprintfdec(FILE* stream, const cli_deco_t frgd_color, const cli_deco_t bkgd
 	}
 
 	va_end(args);
+}
+
+/* put pixel into screen */
+void put_pixel(framebuffer_t* fb, vertice_t position)
+{
+#ifdef __WINDOWS__
+	SetPixel(fb->device, position.x, position.y, RGB(255, 255, 255));
+#else
+	/* TODO: fix segmentation fault */
+	void* address = fb->address + (position.y * fb->fix_info.line_length) + (position.x * 4);
+
+	if ((ulong_t)address <= (ulong_t)(fb->address + fb->size))
+		memset(address, 255, 4);
+#endif
+}
+
+/* draw a line into screen */
+void draw_line(framebuffer_t* fb, vertice_t start, vertice_t end)
+{
+	vertice_t delta = { end.x - start.x, end.y - start.y };
+	int sign[4] = {
+		SGN(delta.x),
+		SGN(delta.y),
+		SGN(delta.x),
+		0
+	};
+
+	/* get longest and shortest delta */
+	size_t longest = ABS(delta.x);
+	size_t shortest = ABS(delta.y);
+
+	if (longest < shortest) {
+		longest = ABS(delta.y);
+		shortest = ABS(delta.x);
+		sign[3] = SGN(delta.y);
+		sign[2] = 0;
+	}
+
+	int numerator = longest >> 1;
+
+	/* calculate each pixel */
+	for (size_t i = 0; i <= longest; i++) {
+		put_pixel(fb, start);
+
+		numerator += shortest;
+
+		if (numerator > longest) {
+			numerator -= longest;
+
+			start.x += sign[0];
+			start.y += sign[1];
+		}
+		else {
+			start.x += sign[2];
+			start.y += sign[3];
+		}
+	}
+}
+
+/* draw rectangle into screen */
+void draw_rect(framebuffer_t* fb, vertice_t start, vertice_t end)
+{
+	if (start.x > end.x)
+		swap(&start.x, &end.x);
+	if (start.y > end.y)
+		swap(&start.y, &end.y);
+
+	vertice_t position = { start.x, start.y };
+	vertice_t delta = { end.x - start.x, end.y - start.y };
+	size_t size = delta.x * delta.y;
+
+	for (size_t i = 0; i < size; i++) {
+		if (position.x == end.x && position.y == end.y)
+			break;
+
+		put_pixel(fb, position);
+
+		if (position.x == end.x) {
+			position.x = start.x;
+			position.y++;
+		}
+
+		position.x++;
+	}
 }
 
 #ifndef __WINDOWS__
@@ -409,9 +510,9 @@ void set_cli_cursor_pos(const size_t column, const size_t row)
 }
 
 /* get cli size */
-position_t get_cli_size()
+vertice_t get_cli_size()
 {
-	position_t size = { 0, 0 };
+	vertice_t size = { 0, 0 };
 
 #ifdef __WINDOWS__
 	CONSOLE_SCREEN_BUFFER_INFO info;
@@ -513,18 +614,13 @@ int main()
 		if (init_screen_framebuffer(&fb)) {
 			/* TODO: Clear Windows screen properly before rendering */
 #ifdef __WINDOWS__
-			for (int i = 0; i < 9000; i++) {
-				int x = rand() % fb.resolution.x;
-				int y = rand() % fb.resolution.y;
-				SetPixel(fb.device, x, y, RGB(rand() % 255, rand() % 255, rand() % 255));
-			}
+			draw_line(&fb, (vertice_t){0,768}, (vertice_t){1366,0});
+			draw_rect(&fb, (vertice_t){100,100}, (vertice_t){300,300});
 			/* TODO: Clear console framebuffer after rendering */
 #else
 			memset(fb.address, 0x0, fb.size);
-			for (int i = 0; i < 9000; i++) {
-				size_t pos = rand() % fb.size;
-				*(fb.address + pos) = (ubyte_t)rand();
-			}
+			draw_line(&fb, (vertice_t){0,0}, (vertice_t){1366,768});
+			draw_rect(&fb, (vertice_t){300,300}, (vertice_t){100,100});
 #endif
 
 			if (get_char() == ' ')
