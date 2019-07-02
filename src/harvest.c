@@ -224,16 +224,16 @@ void fprintfdec(FILE* stream, const cli_deco_t frgd_color, const cli_deco_t bkgd
 }
 
 /* put pixel into screen */
-void put_pixel(framebuffer_t* fb, vertice_t position)
+void put_pixel(framebuffer_t* fb, vertice_t position, ubyte_t color)
 {
 #ifdef __WINDOWS__
-	SetPixel(fb->device, position.x, position.y, RGB(255, 255, 255));
+	/* TODO: change to a better approche than SetPixel (this is painful slow) */
+	SetPixel(fb->device, position.x, position.y, RGB(color, color, color));
 #else
-	/* TODO: fix segmentation fault */
-	void* address = fb->address + (position.y * fb->fix_info.line_length) + (position.x * 4);
+	void* address = fb->address + (position.y * fb->fix_info.line_length) + (position.x * 4 + 4);
 
 	if ((ulong_t)address <= (ulong_t)(fb->address + fb->size))
-		memset(address, 255, 4);
+		memset(address, color, 4);
 #endif
 }
 
@@ -263,7 +263,7 @@ void draw_line(framebuffer_t* fb, vertice_t start, vertice_t end)
 
 	/* calculate each pixel */
 	for (size_t i = 0; i <= longest; i++) {
-		put_pixel(fb, start);
+		put_pixel(fb, start, 255);
 
 		numerator += shortest;
 
@@ -288,15 +288,15 @@ void draw_rect(framebuffer_t* fb, vertice_t start, vertice_t end)
 	if (start.y > end.y)
 		swap(&start.y, &end.y);
 
-	vertice_t position = { start.x, start.y };
+	vertice_t position = { start.x + 1, start.y };
 	vertice_t delta = { end.x - start.x, end.y - start.y };
 	size_t size = delta.x * delta.y;
 
 	for (size_t i = 0; i < size; i++) {
+		put_pixel(fb, position, 255);
+
 		if (position.x == end.x && position.y == end.y)
 			break;
-
-		put_pixel(fb, position);
 
 		if (position.x == end.x) {
 			position.x = start.x;
@@ -305,6 +305,30 @@ void draw_rect(framebuffer_t* fb, vertice_t start, vertice_t end)
 
 		position.x++;
 	}
+}
+
+/* clear screen */
+void clear_screen(framebuffer_t* fb)
+{
+#ifdef __WINDOWS__
+	vertice_t position = { 0, 0 };
+
+	for (size_t i = 0; i < fb->resolution.x * fb->resolution.y; i++) {
+		put_pixel(fb, position, 0);
+
+		if (position.x == fb->resolution.x && position.y == fb->resolution.y)
+			break;
+
+		if (position.x == fb->resolution.x) {
+			position.x = 0;
+			position.y++;
+		}
+
+		position.x++;
+	}
+#else
+	memset(fb->address, 0x0, fb->size);
+#endif
 }
 
 #ifndef __WINDOWS__
@@ -610,25 +634,20 @@ int main()
 	/* init frame buffer */
 	framebuffer_t fb;
 
-	while (true) {
-		if (init_screen_framebuffer(&fb)) {
-			/* TODO: Clear Windows screen properly before rendering */
-#ifdef __WINDOWS__
-			draw_line(&fb, (vertice_t){0,768}, (vertice_t){1366,0});
+	if (init_screen_framebuffer(&fb)) {
+		clear_screen(&fb);
+
+		while (true) {
+			draw_line(&fb, (vertice_t){0,0}, (vertice_t){1300,700});
 			draw_rect(&fb, (vertice_t){100,100}, (vertice_t){300,300});
-			/* TODO: Clear console framebuffer after rendering */
-#else
-			memset(fb.address, 0x0, fb.size);
-			draw_line(&fb, (vertice_t){0,0}, (vertice_t){1366,768});
-			draw_rect(&fb, (vertice_t){300,300}, (vertice_t){100,100});
-#endif
 
 			if (get_char() == ' ')
 				break;
 		}
-	}
 
-	terminate_screen_framebuffer(&fb);
+		clear_screen(&fb);
+		terminate_screen_framebuffer(&fb);
+	}
 
 	/* reset terminal values */
 	clear_cli();
