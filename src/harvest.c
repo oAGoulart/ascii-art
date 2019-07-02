@@ -25,7 +25,9 @@
 #include <stdarg.h>
 
 /* configurations */
-#define MAX_DISPLAY_NAME 64
+#define BASE_RESOLUTION_WIDTH  1366
+#define BASE_RESOLUTION_HEIGHT 768
+#define BASE_ASPECT_RATIO      (BASE_RESOLUTION_WIDTH / BASE_RESOLUTION_HEIGHT)
 
 /* console colors */
 typedef enum cli_deco_e {
@@ -95,6 +97,8 @@ typedef enum cli_deco_e {
 	#include <unistd.h>
 	#include <fcntl.h>
 	#include <termios.h>
+
+	#define MAX_DISPLAY_NAME 64 /* maximum size of display name */
 
 	typedef struct termios console_mode_t;
 #endif
@@ -171,23 +175,23 @@ int get_char()
 }
 
 /* write decorated format string to stream */
-/* TODO: Improve this function */
-void fprintf_deco(FILE* stream, const cli_deco_t frgd_color, const cli_deco_t bkgd_color, const cli_deco_t style, const char* format, ...)
+void fprintfdec(FILE* stream, const cli_deco_t frgd_color, const cli_deco_t bkgd_color, const cli_deco_t style, const char* format, ...)
 {
 	va_list args;
 	va_start(args, format);
 
-	/* append color format */
+	/* alloc string to do formatting */
 	char* str = malloc(BUFSIZ);
 
 	if (str != NULL) {
-		/* old windows versions don't support colored output */
 #ifdef __WINDOWS__
+		/* NOTE: old windows versions don't support colored output so don't show it */
 		int size = vsprintf(str, format, args);
 
 		DWORD written;
 		WriteConsoleW(GetStdHandle(STD_OUTPUT_HANDLE), str, size, &written, NULL);
 #else
+		/* add string styles */
 		sprintf(str, "\e[%dm\e[%dm\e[%dm", frgd_color, bkgd_color, style);
 		strcat(str, format);
 		strcat(str, "\e[0m");
@@ -208,14 +212,14 @@ bool get_active_display_name(char* name, const size_t name_sz)
 {
 	bool success = false;
 
-	/* get primary display name */
+	/* get primary display name and output to tmp file */
 	system("xrandr | grep \" connected primary\" | awk '{ print $1 }' >/tmp/harvest_config");
 
 	char line[name_sz];
 	FILE* file = fopen("/tmp/harvest_config", "r");
 
-	/* get file value */
 	if (file != NULL) {
+		/* get file stored string */
 		if ((fgets(line, name_sz, file)) != NULL) {
 			for (int i = 0; i < name_sz; i++) {
 				if (line[i] != '\n')
@@ -240,7 +244,7 @@ bool get_active_display_name(char* name, const size_t name_sz)
 }
 #endif
 
-/* initialize screen frame buffer */
+/* initialize screen frame buffer for full screen */
 bool init_screen_framebuffer(framebuffer_t* fb)
 {
 	bool success = false;
@@ -267,6 +271,7 @@ bool init_screen_framebuffer(framebuffer_t* fb)
 				fb->resolution.y = GetSystemMetrics(SM_CYSCREEN);
 
 				/* resize window (windowed full screen) */
+				/* FIXME: not resizing well if already maximized */
 				success = (MoveWindow(fb->window, 0, 0, fb->resolution.x, fb->resolution.y, true) && ShowWindow(fb->window, SW_SHOWMAXIMIZED));
 			}
 		}
@@ -305,7 +310,7 @@ bool init_screen_framebuffer(framebuffer_t* fb)
 	return success;
 }
 
-/* terminate screen frame buffer */
+/* terminate screen frame buffer for full screen */
 void terminate_screen_framebuffer(framebuffer_t* fb)
 {
 	if (fb != NULL) {
@@ -355,8 +360,8 @@ console_mode_t set_cli_input_mode(const console_mode_t mode)
 	if (GetConsoleMode(console, &old_mode))
 		SetConsoleMode(console, mode);
 #else
-	tcgetattr(STDIN_FILENO, &old_mode);
-	tcsetattr(STDIN_FILENO, TCSANOW, &mode);
+	if (!tcgetattr(STDIN_FILENO, &old_mode))
+		tcsetattr(STDIN_FILENO, TCSANOW, &mode);
 #endif
 
 	return old_mode;
@@ -376,10 +381,9 @@ console_mode_t set_cli_raw_mode()
 	return set_cli_input_mode(mode);
 }
 
-/* change cli input cursor status */
-void show_cli_input_cursor(const bool show)
+/* change cli output cursor status */
+void show_cli_output_cursor(const bool show)
 {
-/* FIXME: not working properly on windows */
 #ifdef __WINDOWS__
 	CONSOLE_CURSOR_INFO info = (show) ? (CONSOLE_CURSOR_INFO){ 25, true } : (CONSOLE_CURSOR_INFO){ 1, false };
 
@@ -392,14 +396,13 @@ void show_cli_input_cursor(const bool show)
 #endif
 }
 
-/* get cli cursor position */
-/* FIXME: Not going to the right position on Windows */
+/* set cli cursor position */
 void set_cli_cursor_pos(const size_t column, const size_t row)
 {
 #ifdef __WINDOWS__
 	COORD position = { (short)column, (short)row };
 
-	SetConsoleCursorPosition(GetStdHandle(STD_INPUT_HANDLE), position);
+	SetConsoleCursorPosition(GetStdHandle(STD_OUTPUT_HANDLE), position);
 #else
 	printf("\e[%d;%dH", row, column);
 #endif
@@ -432,9 +435,24 @@ position_t get_cli_size()
 /* clear cli output stream */
 void clear_cli()
 {
-	/* FIXME: Not cleaning quite well on Windows */
 #ifdef __WINDOWS__
-	system("cls");
+	HANDLE console = GetStdHandle(STD_OUTPUT_HANDLE);
+	CONSOLE_SCREEN_BUFFER_INFO info;
+
+	if(GetConsoleScreenBufferInfo(console, &info)) {
+		COORD pos = { 0, 0 };
+		DWORD written;
+		DWORD size = info.dwSize.X * info.dwSize.Y;
+
+		/* fill console screen */
+		FillConsoleOutputCharacter(console, (TCHAR)' ', size, pos, &written);
+
+		/* set console attributer */
+		FillConsoleOutputAttribute(console, info.wAttributes, size, pos, &written);
+
+		/* reset cursor */
+		set_cli_cursor_pos(0, 0);
+	}
 #else
 	system("clear && printf '\e[3J'");
 #endif
@@ -448,7 +466,7 @@ int main()
 	cli.old_mode = set_cli_raw_mode();
 
 	/* hide cli text cursor */
-	show_cli_input_cursor(false);
+	show_cli_output_cursor(false);
 
 	/* clear cli */
 	clear_cli();
@@ -458,31 +476,37 @@ int main()
 		cli.size = get_cli_size();
 		cli.aspect_ratio = (double)cli.size.x / cli.size.y;
 
-		for (size_t i = 1, j = 1; j <= cli.size.y; i++) {
+#ifdef __WINDOWS__
+		const size_t init_index = 0;
+#else
+		const size_t init_index = 1;
+#endif
+
+		for (size_t i = init_index, j = init_index; j <= cli.size.y; i++) {
 			if (i > cli.size.x) {
-				i = 1;
+				i = init_index;
 				j++;
 			}
 
 			set_cli_cursor_pos(i, j);
 
-			if (1 == j) {
-				if (i == 1)
-					fprintf_deco(stdout, FOREGROUND_CYAN, BACKGROUND_MAGENTA, DECO_NONE, "%s", "\u250C"); /* TODO: Make Windows support Unicode */
+			if (init_index == j) {
+				if (i == init_index)
+					fprintfdec(stdout, FOREGROUND_CYAN, BACKGROUND_MAGENTA, DECO_NONE, "%s", "\u250C"); /* TODO: Make Windows support Unicode */
 				else
-					fprintf_deco(stdout, FOREGROUND_CYAN, BACKGROUND_MAGENTA, DECO_NONE, "%s", "\u2500");
+					fprintfdec(stdout, FOREGROUND_CYAN, BACKGROUND_MAGENTA, DECO_NONE, "%s", "\u2500");
 			}
-			else if (i == 1)
-				fprintf_deco(stdout, FOREGROUND_CYAN, BACKGROUND_MAGENTA, DECO_NONE, "%s", "\u2502");
+			else if (i == init_index)
+				fprintfdec(stdout, FOREGROUND_CYAN, BACKGROUND_MAGENTA, DECO_NONE, "%s", "\u2502");
 			else
-				fprintf_deco(stdout, FOREGROUND_BR_WHITE, BACKGROUND_BR_WHITE, DECO_NONE, "%c", '.');
+				fprintfdec(stdout, FOREGROUND_BR_WHITE, BACKGROUND_BR_WHITE, DECO_NONE, "%c", '.');
 		}
 
 		if (get_char() == ' ')
 			break;
 	}
 
-		/* init frame buffer */
+	/* init frame buffer */
 	framebuffer_t fb;
 
 	while (true) {
@@ -513,7 +537,7 @@ int main()
 	/* reset terminal values */
 	clear_cli();
 	set_cli_input_mode(cli.old_mode);
-	show_cli_input_cursor(true);
+	show_cli_output_cursor(true);
 
 	return EXIT_SUCCESS;
 }
