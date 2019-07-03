@@ -94,10 +94,18 @@ typedef struct console_s
 	double         aspect_ratio; /* aspect ratio from console size */
 } console_t;
 
+typedef struct color_s
+{
+	ubyte_t red;
+	ubyte_t green;
+	ubyte_t blue;
+	ubyte_t alpha;
+} color_t;
+
 typedef struct print_style_s
 {
-	ubyte_t foreground; /* foreground color */
-	ubyte_t background; /* background color */
+	color_t foreground; /* foreground color */
+	color_t background; /* background color */
 	ubyte_t decoration; /* decoration */
 } print_style_t;
 
@@ -119,14 +127,6 @@ typedef struct framebuffer_s
 	struct fb_fix_screeninfo fix_info;      /* screen fixed information */
 #endif
 } framebuffer_t;
-
-typedef struct color_s
-{
-	ubyte_t red;
-	ubyte_t green;
-	ubyte_t blue;
-	ubyte_t alpha;
-} color_t;
 
 /* swap two long_t values */
 void swap(long_t* a, long_t* b)
@@ -170,7 +170,6 @@ ulong_t color_to_long(const color_t color)
 	return (ulong_t)(color.red << 24) + (ulong_t)(color.green << 16) + (ulong_t)(color.blue << 8) + (ulong_t)(color.alpha);
 }
 
-/* TODO: Create integrated console style structure */
 /* write decorated format string to stream */
 void fprintfdec(FILE* stream, const print_style_t style, const char* format, ...)
 {
@@ -190,7 +189,11 @@ void fprintfdec(FILE* stream, const print_style_t style, const char* format, ...
 			WriteConsoleW(GetStdHandle(STD_OUTPUT_HANDLE), str, size, &written, NULL);
 #else
 			/* add string styles */
-			sprintf(str, "\e[%dm\e[%dm\e[%dm", style.foreground, style.background, style.decoration);
+			sprintf(str, "\e[38;2;%d;%d;%dm\e[48;2;%d;%d;%dm\e[%dm", 
+				style.foreground.red, style.foreground.green, style.foreground.blue, 
+				style.background.red, style.foreground.green, style.foreground.blue,
+				style.decoration);
+
 			strcat(str, format);
 			strcat(str, "\e[0m");
 
@@ -624,14 +627,14 @@ int main()
 
 			if (CLI_CURSOR_START_INDEX == j) {
 				if (i == CLI_CURSOR_START_INDEX)
-					fprintfdec(stdout, (print_style_t){ 36, 45, 5 }, "%s", "\u250C");
+					fprintfdec(stdout, (print_style_t){ (color_t){ 40, 50, 80, 255 }, (color_t){ 80, 25, 40, 255 }, 5 }, "%s", "\u250C");
 				else
-					fprintfdec(stdout, (print_style_t){ 36, 45, 5 }, "%s", "\u2500");
+					fprintfdec(stdout, (print_style_t){ (color_t){ 40, 50, 80, 255 }, (color_t){ 80, 25, 40, 255 }, 5 }, "%s", "\u2500");
 			}
 			else if (i == CLI_CURSOR_START_INDEX)
-				fprintfdec(stdout, (print_style_t){ 36, 45, 5 }, "%s", "\u2502");
+				fprintfdec(stdout, (print_style_t){ (color_t){ 40, 50, 80, 255 }, (color_t){ 80, 25, 40, 255 }, 5 }, "%s", "\u2502");
 			else
-				fprintfdec(stdout, (print_style_t){ 36, 45, 5 }, "%c", '.');
+				fprintfdec(stdout, (print_style_t){ (color_t){ 100, 80, 20, 255 }, (color_t){ 10, 160, 40, 255 }, 5 }, "%c", '.');
 		}
 
 		if (get_char() == ' ')
