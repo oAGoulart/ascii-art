@@ -23,11 +23,14 @@
 #include <stdint.h>
 #include <stdbool.h>
 #include <stdarg.h>
+#include <time.h>
 
 /* configurations */
 #define BASE_RESOLUTION_WIDTH  1366
 #define BASE_RESOLUTION_HEIGHT 768
 #define BASE_ASPECT_RATIO      (BASE_RESOLUTION_WIDTH / BASE_RESOLUTION_HEIGHT)
+#define SECOND_MS              1000
+#define FRAME_TIME             (SECOND_MS / 60)
 
 /* platform specific stuff */
 #if defined(_WIN32) || defined(_WIND64) || defined(__MINGW32__) || defined (__MINGW64__)
@@ -128,6 +131,36 @@ typedef struct framebuffer_s
 #endif
 } framebuffer_t;
 
+typedef struct rect_s
+{
+	vertice_t start; /* rect start */
+	vertice_t end;   /* rect end */
+	color_t   color; /* color */
+} rect_t;
+
+typedef struct player_s
+{
+	vertice_t coord;     /* entity position */
+	vertice_t velocity;  /* entity axis velocity */
+	vertice_t accel;     /* entity axis acceleration */
+	color_t   color;     /* color */
+	rect_t    bound_box; /* boundaries box */
+} player_t;
+
+typedef struct scene_s
+{
+	console_t     cli;         /* console data */
+	framebuffer_t fb;          /* frame buffer data */
+	clock_t       frame_delta; /* time from last render */
+	bool          game_over;   /* finish game */
+	player_t      player;      /* game player */
+} scene_t;
+
+/* forward declarations */
+void draw_cli_menu(scene_t* scene);
+void render_game(scene_t* scene);
+void handle_input(scene_t* scene);
+
 /* swap two long_t values */
 void swap(long_t* a, long_t* b)
 {
@@ -165,10 +198,14 @@ int get_char()
 }
 
 /* convert color_t struct to ulong_t */
-ulong_t color_to_long(const color_t color)
+ulong_t color_to_long(framebuffer_t* fb, const color_t color)
 {
-	return (ulong_t)(color.red << 24) + (ulong_t)(color.green << 16) + (ulong_t)(color.blue << 8) + (ulong_t)(color.alpha);
+	if (fb != NULL)
+		return (color.red << 24) | (color.green << 16) | (color.blue << 8) | color.alpha;
+
+	return 0;
 }
+
 
 /* write decorated format string to stream */
 void fprintfdec(FILE* stream, const print_style_t style, const char* format, ...)
@@ -186,12 +223,12 @@ void fprintfdec(FILE* stream, const print_style_t style, const char* format, ...
 			int size = vsprintf(str, format, args);
 
 			DWORD written;
-			WriteConsoleW(GetStdHandle(STD_OUTPUT_HANDLE), str, size, &written, NULL);
+			WriteConsoleA(GetStdHandle(STD_OUTPUT_HANDLE), str, size, &written, NULL);
 #else
 			/* add string styles */
 			sprintf(str, "\e[38;2;%d;%d;%dm\e[48;2;%d;%d;%dm\e[%dm", 
 				style.foreground.red, style.foreground.green, style.foreground.blue, 
-				style.background.red, style.foreground.green, style.foreground.blue,
+				style.background.red, style.background.green, style.background.blue,
 				style.decoration);
 
 			strcat(str, format);
@@ -215,10 +252,11 @@ void put_pixel(framebuffer_t* fb, const vertice_t position, const color_t color)
 #ifdef __WINDOWS__
 		SetPixel(fb->device, position.x, position.y, RGB(color.red, color.green, color.blue));
 #else
-		void* address = fb->address + (position.y * fb->fix_info.line_length) + (position.x * 4 + 4);
+		void* address = fb->address + (position.y * fb->fix_info.line_length) + (position.x * (fb->var_info.bits_per_pixel / 8) + 4);
 
+		/* TODO: Fix color not working on Linux */
 		if ((ulong_t)address <= (ulong_t)(fb->address + fb->size))
-			memset(address, color_to_long(color), 4);
+			memset(address, color_to_long(fb, color), (fb->var_info.bits_per_pixel / 8));
 #endif
 	}
 }
@@ -324,6 +362,129 @@ void draw_rect(framebuffer_t* fb, vertice_t start, vertice_t end, const color_t 
 	}
 }
 
+/* NOTE: only used for drawing triangles on Linux */
+#ifndef __WINDOWS__
+/* bottom flat triangle */
+static void fill_bottom_flat_triangle(framebuffer_t* fb, vertice_t a, vertice_t b, vertice_t c, const color_t color)
+{
+	if (fb != NULL) {
+		float rev_slope_left = (float)(b.x - a.x) / (b.y - a.y);
+		float rev_slope_right = (float)(c.x - a.x) / (c.y - a.y);
+		float curr_x_left = a.x;
+		float curr_x_right = a.x;
+
+		for (long_t scanline = a.y; scanline <= b.y; scanline++) {
+			vertice_t line_start = { (long_t)curr_x_left, scanline };
+			vertice_t line_end = { (long_t)curr_x_right, scanline };
+
+			draw_line(fb, line_start, line_end, color);
+
+			curr_x_left += rev_slope_left;
+			curr_x_right += rev_slope_right;
+		}
+	}
+}
+
+/* top flat triangle */
+static void fill_top_flat_triangle(framebuffer_t* fb, vertice_t a, vertice_t b, vertice_t c, const color_t color)
+{
+	if (fb != NULL) {
+		float rev_slope_left = (float)(c.x - a.x) / (c.y - a.y);
+		float rev_slope_right = (float)(c.x - b.x) / (c.y - b.y);
+		float curr_x_left = c.x;
+		float curr_x_right = c.x;
+
+		for (long_t scanline = c.y; scanline > a.y; scanline--) {
+			vertice_t line_start = { (long_t)curr_x_left, scanline };
+			vertice_t line_end = { (long_t)curr_x_right, scanline };
+
+			draw_line(fb, line_start, line_end, color);
+
+			curr_x_left -= rev_slope_left;
+			curr_x_right -= rev_slope_right;
+		}
+	}
+}
+
+/* get intersection bewtween two lines */
+static bool line_intersection(vertice_t a, vertice_t b, vertice_t c, vertice_t d, vertice_t* output)
+{
+	/* represent lines as formulas */
+	float a1 = b.y - a.y;
+	float b1 = a.x - b.x;
+	float c1 = a1 * (a.x) + b1 * (a.y);
+	float a2 = d.y - c.y;
+	float b2 = c.x - d.x;
+	float c2 = a2 * (c.x) + b2 * (c.y);
+
+	/* calculate determinant */
+	float determinant = a1 * b2 - a2 * b1;
+
+	/* check lines aren't in pararell */
+	if (determinant != 0) {
+		output->x = (long_t)((b2 * c1 - b1 * c2) / determinant);
+		output->y = (long_t)((a1 * c2 - a2 * c1) / determinant);
+
+		return true;
+	}
+
+	return false;
+}
+#endif
+
+/* draw triangle into screen */
+void draw_triangle(framebuffer_t* fb, vertice_t a, vertice_t b, vertice_t c, const color_t color)
+{
+	if (fb != NULL) {
+#ifdef __WINDOWS__
+		HGDIOBJ original = SelectObject(fb->device, GetStockObject(DC_PEN));
+
+		if (original != NULL) {
+			/* switch pen */
+			SelectObject(fb->device, GetStockObject(DC_PEN));
+			SetDCPenColor(fb->device, RGB(color.red, color.green, color.blue));
+
+			/* convert vertices to points */
+			POINT points[3] = { { a.x, a.y }, { b.x, b.y }, { c.x, c.y} };
+
+			/* draw triangle */
+			Polygon(fb->device, points, 3);
+
+			SelectObject(fb->device, original);
+		}
+#else
+		/* sort vertices by y-coordinate */
+		if (a.y > b.y) {
+			swap(&a.x, &b.x);
+			swap(&a.y, &b.y);
+		}
+		if (b.y > c.y) {
+			swap(&b.x, &c.x);
+			swap(&b.y, &c.y);
+		}
+		if (a.y > c.y) {
+			swap(&a.x, &c.x);
+			swap(&a.y, &c.y);
+		}
+
+		/* check for general cases */
+		if (b.y == c.y)
+			fill_bottom_flat_triangle(fb, a, b, c, color);
+		else if (a.y == b.y)
+			fill_top_flat_triangle(fb, a, b, c, color);
+		else {
+			/* split triangle into bottom flat and top flat */
+			vertice_t d = { c.x + b.x, b.y };
+
+			if (line_intersection(a, c, b, d, &d)) {
+				fill_bottom_flat_triangle(fb, a, b, d, color);
+				fill_top_flat_triangle(fb, b, d, c, color);
+			}
+		}
+#endif
+	}
+}
+
 /* clear screen */
 void clear_screen(framebuffer_t* fb)
 {
@@ -377,6 +538,28 @@ bool get_active_display_name(char* name, const size_t name_sz)
 	return success;
 }
 #endif
+
+/* calculate box position and size due to scaling */
+rect_t get_scaled_box(framebuffer_t* fb, const long_t left, const long_t top, const long_t bottom, const long_t right, const color_t color)
+{
+	rect_t rect = { { left, top }, { right, bottom }, color };
+
+	if (fb != NULL) {
+#ifdef __WINDOWS__
+		rect.start.y *= fb->resolution.y / BASE_RESOLUTION_HEIGHT;
+		rect.start.x *= fb->resolution.x / BASE_RESOLUTION_HEIGHT;
+		rect.end.y *= rect.start.y / top;
+		rect.end.x *= (rect.start.x / left) / ((fb->resolution.x / fb->resolution.y) / BASE_ASPECT_RATIO);
+#else
+		rect.start.y *= fb->var_info.yres / BASE_RESOLUTION_HEIGHT;
+		rect.start.x *= fb->var_info.xres / BASE_RESOLUTION_HEIGHT;
+		rect.end.y *= rect.start.y / top;
+		rect.end.x *= (rect.start.x / left) / ((fb->var_info.xres / fb->var_info.yres) / BASE_ASPECT_RATIO);
+#endif
+	}
+
+	return rect;
+}
 
 /* terminate screen frame buffer for full screen */
 void terminate_screen_framebuffer(framebuffer_t* fb)
@@ -466,7 +649,8 @@ bool init_screen_framebuffer(framebuffer_t* fb)
 					memcpy(&fb->orig_var_info, &fb->var_info, sizeof(struct fb_var_screeninfo));
 
 					/* change buffer info */
-					fb->var_info.bits_per_pixel = 8;
+					fb->var_info.grayscale = 0;
+					fb->var_info.bits_per_pixel = 32;
 					fb->var_info.activate |= FB_ACTIVATE_NOW | FB_ACTIVATE_FORCE;
 
 					if (!ioctl(fb->fd, FBIOPUT_VSCREENINFO, &fb->var_info)) {
@@ -602,10 +786,10 @@ void clear_cli()
 
 int main()
 {
-	console_t cli;
+	scene_t scene;
 
 	/* get cli raw input */
-	cli.old_mode = set_cli_raw_mode();
+	scene.cli.old_mode = set_cli_raw_mode();
 
 	/* hide cli text cursor */
 	show_cli_output_cursor(false);
@@ -614,56 +798,146 @@ int main()
 
 	while (true) {
 		/* store cli size and aspect ratio */
-		cli.size = get_cli_size();
-		cli.aspect_ratio = (double)cli.size.x / cli.size.y;
+		scene.cli.size = get_cli_size();
+		scene.cli.aspect_ratio = (double)scene.cli.size.x / scene.cli.size.y;
 
-		for (size_t i = CLI_CURSOR_START_INDEX, j = CLI_CURSOR_START_INDEX; j <= cli.size.y; i++) {
-			if (i > cli.size.x) {
-				i = CLI_CURSOR_START_INDEX;
-				j++;
-			}
+		/* render */
+		draw_cli_menu(&scene);
 
-			set_cli_cursor_pos(i, j);
-
-			if (CLI_CURSOR_START_INDEX == j) {
-				if (i == CLI_CURSOR_START_INDEX)
-					fprintfdec(stdout, (print_style_t){ (color_t){ 40, 50, 80, 255 }, (color_t){ 80, 25, 40, 255 }, 5 }, "%s", "\u250C");
-				else
-					fprintfdec(stdout, (print_style_t){ (color_t){ 40, 50, 80, 255 }, (color_t){ 80, 25, 40, 255 }, 5 }, "%s", "\u2500");
-			}
-			else if (i == CLI_CURSOR_START_INDEX)
-				fprintfdec(stdout, (print_style_t){ (color_t){ 40, 50, 80, 255 }, (color_t){ 80, 25, 40, 255 }, 5 }, "%s", "\u2502");
-			else
-				fprintfdec(stdout, (print_style_t){ (color_t){ 100, 80, 20, 255 }, (color_t){ 10, 160, 40, 255 }, 5 }, "%c", '.');
-		}
-
-		if (get_char() == ' ')
+		/* stop if any key press */
+		if (get_char() != EOF)
 			break;
 	}
 
 	clear_cli();
 
 	/* init frame buffer */
-	framebuffer_t fb;
+	if (init_screen_framebuffer(&scene.fb)) {
+		clear_screen(&scene.fb);
 
-	if (init_screen_framebuffer(&fb)) {
-		clear_screen(&fb);
+		/* initialize player */
+		scene.player.bound_box = get_scaled_box(&scene.fb, 663, 703, 753, 703, (color_t){ 255, 255, 255, 255 });
 
-		while (true) {
-			draw_line(&fb, (vertice_t){ 0, 0 }, (vertice_t){ 1366, 768 }, (color_t){ 255, 255, 255, 255 });
-			draw_rect(&fb, (vertice_t){ 100, 100 }, (vertice_t){ 300, 300 }, (color_t){ 255, 255, 255, 255 });
+		scene.game_over = false;
 
-			if (get_char() == ' ')
-				break;
+		while (!scene.game_over) {
+			/* render game */
+			render_game(&scene);
+			handle_input(&scene);
 		}
 
-		clear_screen(&fb);
-		terminate_screen_framebuffer(&fb);
+		clear_screen(&scene.fb);
+		terminate_screen_framebuffer(&scene.fb);
 	}
 
 	/* reset terminal values */
-	set_cli_input_mode(cli.old_mode);
+	set_cli_input_mode(scene.cli.old_mode);
 	show_cli_output_cursor(true);
 
 	return EXIT_SUCCESS;
+}
+
+void draw_cli_menu(scene_t* scene)
+{
+	if (scene != NULL) {
+		vertice_t start = { CLI_CURSOR_START_INDEX + (scene->cli.size.x / 2) - 20, CLI_CURSOR_START_INDEX + (scene->cli.size.y / 2) - 5 };
+		vertice_t end = { CLI_CURSOR_START_INDEX + (scene->cli.size.x / 2) + 20, CLI_CURSOR_START_INDEX + (scene->cli.size.y / 2) + 5 };
+
+		/* draw box */
+		for (size_t i = CLI_CURSOR_START_INDEX, j = CLI_CURSOR_START_INDEX; j <= scene->cli.size.y; i++) {
+			if (i > scene->cli.size.x) {
+				i = CLI_CURSOR_START_INDEX;
+				j++;
+			}
+
+			set_cli_cursor_pos(i, j);
+
+			if (j == start.y && i == start.x)
+				fprintfdec(stdout, (print_style_t){ (color_t){ 40, 50, 80, 255 }, (color_t){ 232, 215, 162, 255 }, 5 }, "%s", "\u250C");
+			else if (j == end.y && i == end.x)
+				fprintfdec(stdout, (print_style_t){ (color_t){ 40, 50, 80, 255 }, (color_t){ 232, 215, 162, 255 }, 5 }, "%s", "\u2518");
+			else if (j == end.y && i == start.x)
+				fprintfdec(stdout, (print_style_t){ (color_t){ 40, 50, 80, 255 }, (color_t){ 232, 215, 162, 255 }, 5 }, "%s", "\u2514");
+			else if (j == start.y && i == end.x)
+				fprintfdec(stdout, (print_style_t){ (color_t){ 40, 50, 80, 255 }, (color_t){ 232, 215, 162, 255 }, 5 }, "%s", "\u2510");
+			else if ((j == start.y || j == end.y) && i > start.x && i < end.x)
+				fprintfdec(stdout, (print_style_t){ (color_t){ 40, 50, 80, 255 }, (color_t){ 232, 215, 162, 255 }, 5 }, "%s", "\u2500");
+			else if (j > start.y && j < end.y && (i == start.x || i == end.x))
+				fprintfdec(stdout, (print_style_t){ (color_t){ 40, 50, 80, 255 }, (color_t){ 232, 215, 162, 255 }, 5 }, "%s", "\u2502");
+			else
+				fprintfdec(stdout, (print_style_t){ (color_t){ 232, 215, 162, 255 }, (color_t){ 232, 215, 162, 255 }, 5 }, "%c", ' ');
+		}
+
+		/* draw text */
+		set_cli_cursor_pos(start.x + 7, start.y + 3);
+		fprintfdec(stdout, (print_style_t){ (color_t){ 40, 50, 80, 255 }, (color_t){ 232, 215, 162, 255 }, 5 }, "%s", "Space Force Simulator 3049");
+
+		/* draw button */
+		set_cli_cursor_pos(start.x + 17, start.y + 7);
+		fprintfdec(stdout, (print_style_t){ (color_t){ 232, 215, 162, 255 }, (color_t){ 40, 50, 80, 255 }, 5 }, "%s", " START! ");
+	}
+}
+
+/* render game to screen */
+void render_game(scene_t* scene)
+{
+	if (scene != NULL) {
+		/* only draw maximum num of frames */
+#ifdef __WINDOWS__
+		if (clock()) {
+#else
+		if ((clock() - scene->frame_delta) / (CLOCKS_PER_SEC / 10000) > FRAME_TIME) {
+#endif
+			scene->frame_delta = clock();
+
+			/* clear screen */
+			clear_screen(&scene->fb);
+
+			/* draw player */
+			vertice_t a = { (scene->player.bound_box.end.x - scene->player.bound_box.start.x) / 2 + scene->player.bound_box.start.x, scene->player.bound_box.start.y };
+			vertice_t b = { scene->player.bound_box.start.x, scene->player.bound_box.end.y };
+
+			draw_triangle(&scene->fb, a, b, scene->player.bound_box.end, scene->player.bound_box.color);
+
+			/* draw enemies */
+		}
+	}
+}
+
+/* handle player input */
+void handle_input(scene_t* scene)
+{
+	if (scene != NULL) {
+#ifdef __WINDOWS__
+		long_t player_max_pos_left = 10;
+		long_t player_max_pos_right = scene->fb.resolution.x - 10;
+#else
+		long_t player_max_pos_left = 10;
+		long_t player_max_pos_right = scene->fb.var_info.xres - 10;
+#endif
+
+		/* handle keyboard input */
+		ubyte_t ch = get_char();
+
+		switch (ch) {
+			case 'D':
+			case 'd':
+				if (player_max_pos_right > scene->player.bound_box.end.x + 12) {
+					scene->player.bound_box.start.x += 12;
+					scene->player.bound_box.end.x += 12;
+				}
+				break;
+
+			case 'A':
+			case 'a':
+				if (player_max_pos_left < scene->player.bound_box.start.x - 12) {
+					scene->player.bound_box.start.x -= 12;
+					scene->player.bound_box.end.x -= 12;
+				}
+				break;
+
+			case '\e':
+				scene->game_over = true;
+		}
+	}
 }
